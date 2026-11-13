@@ -8,7 +8,7 @@ Hotline is an onchain agent you reach by phone. It holds USDC on Arc and acts wi
 
 The phone call is the guardrail.
 
-> **Status: in progress.** The decision loop, policy engine, ledger, tool API, Arc wallet, and the voice agent's definition are built and tested. The agent exists on ElevenLabs and passes its behaviour tests in text. It is not on a phone number yet. Phone calls, outbound approval calls, the onchain deposit trigger, the dashboard, and the iMessage channel are next. This README is updated as each piece lands. Planning docs: [UBC-Hackathon-2026](https://github.com/sunrobert/UBC-Hackathon-2026).
+> **Status: in progress.** The decision loop, policy engine, ledger, tool API, Arc wallet, and the voice agent's definition are built and tested. The agent exists on ElevenLabs and passes its behaviour tests in text. The outbound call queue and the onchain deposit watcher are built and unit-tested. It is not on a phone number yet, so no real call has been placed. Attaching the number, a QuickNode Stream as the primary trigger, the dashboard, and the iMessage channel are next. This README is updated as each piece lands. Planning docs: [UBC-Hackathon-2026](https://github.com/sunrobert/UBC-Hackathon-2026).
 
 ## The decision loop
 
@@ -99,6 +99,21 @@ The agent runs on **ElevenLabs Agents**. Its whole definition is code in [`src/a
 2. *Verified by text tests:* the ten languages above.
 3. *Supported by the platform, not verified here:* the other 22.
 
+## When money arrives
+
+```
+USDC lands in the agent wallet
+  -> deposit watcher sees Arc's Transfer log        (src/deposits/watcher.ts)
+  -> ledger records it once, keyed on tx hash + log index
+  -> sweep rule: is the balance over the threshold?  (src/sweep.ts)
+  -> policy: anything nobody asked for is CALL       (src/policy.ts)
+  -> call queue recomputes the amount and dials      (src/calls/queue.ts)
+  -> agent states the amount and asks for yes + PIN
+  -> confirm_action -> send -> ledger
+```
+
+If nobody answers, the queue tries once more after ninety seconds, then marks the action `expired_no_answer`. Nothing moves without the spoken yes.
+
 ## How it uses Arc
 
 - **USDC is the native asset and the gas token.** A transfer is a plain value send, and fees are paid in the same USDC the agent is managing. The gas reserve rule exists because of this.
@@ -125,6 +140,9 @@ Explorer: https://explorer.testnet.arc.io
 | `src/sweep.ts` | The standing rule: keep a threshold on hand, sweep the rest. |
 | `src/server.ts` | HTTP tool endpoints for the voice agent, with the owner gate, and the call-start hook. |
 | `src/agent/definition.ts` | The voice agent as code: prompt, tools, languages. |
+| `src/calls/queue.ts` | Outbound approval calls: one at a time, two attempts ninety seconds apart, amount recomputed at dial time. |
+| `src/calls/elevenlabs.ts` | Places calls through ElevenLabs' Twilio integration and watches for them to end. |
+| `src/deposits/watcher.ts` | Reads Arc's USDC Transfer logs and turns transfers to the agent into deposits. |
 | `scripts/agent.ts` | Pushes the agent definition to ElevenLabs. Idempotent. |
 | `scripts/agent-tests.ts` | Behaviour tests against the live agent. |
 | `src/wallet/arc.ts` | Arc testnet wallet through viem. |
@@ -143,6 +161,8 @@ npm run check      # typecheck + tests
 npm start          # after setting OWNER_NUMBERS in .env.local
 npm run agent      # create or update the voice agent (needs ELEVENLABS_API_KEY, PUBLIC_URL)
 npm run agent:test # behaviour tests against the live agent
+npm run phone      # attach your Twilio number to the agent (needs the three TWILIO_ values)
+npm run demo:deposit -- 200   # send testnet USDC from the sender wallet to the agent
 ```
 
 Fund the `sender` and `agent` addresses with testnet USDC at https://faucet.circle.com (network: Arc Testnet).
