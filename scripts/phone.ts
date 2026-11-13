@@ -32,6 +32,9 @@ const importBody = provider === "sip_trunk"
         address: process.env.TELNYX_SIP_ADDRESS?.trim() || "sip.telnyx.com",
         transport: "tcp",
         credentials: { username: need("TELNYX_SIP_USERNAME"), password: need("TELNYX_SIP_PASSWORD") },
+        // Telnyx matches a call to its connection by username. ElevenLabs can't put it in the
+        // Contact header, so send it in the header Telnyx accepts instead.
+        headers: { "X-Telnyx-Username": need("TELNYX_SIP_USERNAME") },
       },
       // Telnyx inbound trunks do not use digest authentication.
       inbound_trunk_config: {},
