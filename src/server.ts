@@ -3,6 +3,9 @@
 // Every tool call must (1) carry the shared secret and (2) come from a conversation
 // with the owner. There are deliberately no tools for unpausing or changing rules:
 // those live on the dashboard, behind a different credential.
+//
+// The dashboard is /dashboard (a static page) plus /api/* (bearer token). It can read the
+// ledger, unpause, and start a voice session with the agent from the browser.
 
 import { Hono } from "hono";
 import type { Context } from "hono";
@@ -11,12 +14,20 @@ import type { Engine } from "./engine.ts";
 import type { ServerConfig } from "./config.ts";
 import { normalizeE164 } from "./phone.ts";
 import { DEFAULT_OPENING_LINE } from "./agent/definition.ts";
+import { DASHBOARD_HTML } from "./dashboard/page.ts";
+import { explorerTx } from "./wallet/arc.ts";
+import { toMicros, fromMicros } from "./money.ts";
 
 export interface AppDeps {
   engine: Engine;
   cfg: ServerConfig;
   /** True for conversations this backend dialled itself. Filled in by the call queue. */
   isOutbound?: (conversationId: string) => boolean;
+  /** Gets a token for a browser voice session. Null when voice is not configured. */
+  getConversationToken?: (() => Promise<string>) | null;
+  /** Simulated deposits are a development aid. Off in production unless set. */
+  allowSimulate?: boolean;
+  now?: () => number;
 }
 
 type Body = Record<string, unknown>;
@@ -38,21 +49,29 @@ function readBoolean(v: unknown): boolean | undefined {
 
 const readString = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 
-export function createApp({ engine, cfg, isOutbound = () => false }: AppDeps): Hono {
+export function createApp(deps: AppDeps): Hono {
+  const { engine, cfg, isOutbound = () => false } = deps;
+  const getConversationToken = deps.getConversationToken ?? null;
+  const allowSimulate = deps.allowSimulate ?? process.env.NODE_ENV !== "production";
+  const now = deps.now ?? Date.now;
   const app = new Hono();
   const owners = new Set(cfg.ownerNumbers);
+  /** Browser conversations the signed-in owner started from the dashboard. They have no caller number. */
+  const browserCalls = new Set<string>();
 
   app.get("/health", (c) => c.json({ ok: true }));
 
   /**
    * Who is on the line? Inbound: the caller must be an owner. Outbound: the owner is the
-   * called party, or the conversation is one we placed. Caller ID can be spoofed, which is
-   * why anything over the threshold also needs the PIN.
+   * called party, or the conversation is one we placed. Browser: the conversation was bound
+   * from the dashboard by someone holding the dashboard token. Caller ID can be spoofed,
+   * which is why anything over the threshold also needs the PIN.
    */
   const isOwnerConversation = (body: Body, conversationId: string): boolean => {
     const caller = normalizeE164(body.caller_id);
     const called = normalizeE164(body.called_number);
-    return (caller !== null && owners.has(caller)) || (called !== null && owners.has(called)) || isOutbound(conversationId);
+    return (caller !== null && owners.has(caller)) || (called !== null && owners.has(called))
+      || isOutbound(conversationId) || browserCalls.has(conversationId);
   };
 
   const tools: Record<string, (c: Context, body: Body, conversationId: string) => Promise<Response>> = {
@@ -138,6 +157,105 @@ export function createApp({ engine, cfg, isOutbound = () => false }: AppDeps): H
       return c.json({ error: "not_owner", message: "This number is not allowed to use this agent. Say you cannot help and end the call." }, 403);
     }
     return handler(c, body, conversationId);
+  });
+
+  // ---------- dashboard ----------
+
+  app.get("/dashboard", (c) => c.html(DASHBOARD_HTML));
+
+  // Everything under /api needs the dashboard token, in a header. Never in the URL, where it would end up in logs.
+  app.use("/api/*", async (c, next) => {
+    const header = c.req.header("authorization") ?? "";
+    const given = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : undefined;
+    if (!secretMatches(given, cfg.dashboardToken)) return c.json({ error: "unauthorized" }, 401);
+    await next();
+  });
+
+  const readJson = async (c: Context): Promise<Body> => {
+    const parsed: unknown = await c.req.json().catch(() => ({}));
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? (parsed as Body) : {};
+  };
+
+  app.get("/api/state", async (c) => {
+    const status = await engine.status();
+    return c.json({
+      wallet_address: engine.walletAddress,
+      balance_usdc: status.balance_usdc,
+      paused: status.paused,
+      rules: engine.rules(),
+      pending_actions: status.pending_actions,
+      ledger: engine.history(50).map((entry) => ({ ...entry, explorer_url: entry.tx_hash ? explorerTx(entry.tx_hash) : null })),
+      voice_configured: getConversationToken !== null,
+      simulate_allowed: allowSimulate,
+    });
+  });
+
+  app.post("/api/unpause", (c) => {
+    engine.unpause();
+    return c.json({ paused: false });
+  });
+
+  /** Step one of a browser call: a token for the session and what the agent should know going in. */
+  app.post("/api/call/start", async (c) => {
+    if (!getConversationToken) {
+      return c.json({ error: "voice_not_configured", message: "Set ELEVENLABS_API_KEY and ELEVENLABS_AGENT_ID, then restart the server." }, 503);
+    }
+    // Recompute now, bind later: the call does not have a conversation id until it connects.
+    const waiting = await engine.previewPending();
+    let token: string;
+    try {
+      token = await getConversationToken();
+    } catch (err) {
+      console.error("[dashboard] conversation token:", err instanceof Error ? err.message : err);
+      return c.json({ error: "token_failed", message: "Could not get a call token from ElevenLabs. Check the API key and agent id." }, 502);
+    }
+    const signedIn = "The owner opened this voice session from their dashboard, where they are signed in. Treat them as the owner.";
+    return c.json({
+      conversation_token: token,
+      dynamic_variables: {
+        call_context: waiting
+          ? `${signedIn} One action is waiting for their approval on this call: ${waiting.summary}, because money arrived and their standing rule moves the excess to savings. Tell them about it first and ask for a yes or no and the PIN.`
+          : `${signedIn} Nothing is waiting for approval.`,
+        opening_line: waiting ? "Hotline here. There's one thing waiting for your approval." : DEFAULT_OPENING_LINE,
+      },
+    });
+  });
+
+  /** Step two: the call connected. Let its tool calls through, and tie any waiting sweep to it. */
+  app.post("/api/call/bind", async (c) => {
+    const conversationId = readString((await readJson(c)).conversation_id);
+    if (!conversationId) return c.json({ error: "bad_request", message: "conversation_id is required." }, 400);
+    browserCalls.add(conversationId);
+    return c.json({ ok: true, waiting: engine.bindPendingTo(conversationId) });
+  });
+
+  app.post("/api/call/end", async (c) => {
+    const conversationId = readString((await readJson(c)).conversation_id);
+    if (!conversationId) return c.json({ error: "bad_request", message: "conversation_id is required." }, 400);
+    engine.callEnded(conversationId);
+    return c.json({ ok: true });
+  });
+
+  /**
+   * Development aid: run the deposit path without a chain transfer. It does not credit the
+   * real wallet, so against a real wallet the sweep rule still works from the real balance.
+   */
+  let simulated = 0;
+  app.post("/api/simulate-deposit", async (c) => {
+    if (!allowSimulate) return c.json({ error: "not_found" }, 404);
+    let amount: number;
+    try { amount = toMicros((await readJson(c)).amount_usdc as number); } catch {
+      return c.json({ error: "bad_request", message: "amount_usdc must be a positive number." }, 400);
+    }
+    const at = now();
+    const result = await engine.handleDeposit({
+      tx_hash: `simulated-${at}-${++simulated}`, log_index: 0, from_addr: "simulated", amount, block_number: 0, via: "simulated", now: at,
+    });
+    const row = result.action;
+    return c.json({
+      duplicate: result.duplicate,
+      action: row ? { code: row.code, decision: row.decision, rule: row.rule, status: row.status, reason: row.reason, to_label: row.to_label, amount_usdc: fromMicros(row.amount) } : null,
+    });
   });
 
   app.onError((err, c) => {

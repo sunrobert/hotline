@@ -23,7 +23,9 @@ export interface Config {
   ownerLanguage: string;
   /** The number the agent dials for approvals: the first of OWNER_NUMBERS. */
   ownerNumber: string;
-  /** Null until the agent exists and a phone number is attached. Calls are skipped without it. */
+  /** The voice agent on ElevenLabs. Enough for browser calls from the dashboard. Null until it exists. */
+  agent: { apiKey: string; agentId: string } | null;
+  /** Null until the agent exists and a phone number is attached. Phone calls are skipped without it. */
   voice: { apiKey: string; agentId: string; phoneNumberId: string; provider: "twilio" | "sip_trunk" } | null;
 }
 
@@ -127,6 +129,9 @@ export function loadConfig(env: Env): Config {
     port: integer(env, "PORT", 8787, 1, 65_535),
     ownerLanguage: env.OWNER_LANGUAGE?.trim() || "en",
     ownerNumber: ownerNumbers[0]!,
+    agent: env.ELEVENLABS_API_KEY?.trim() && env.ELEVENLABS_AGENT_ID?.trim()
+      ? { apiKey: env.ELEVENLABS_API_KEY.trim(), agentId: env.ELEVENLABS_AGENT_ID.trim() }
+      : null,
     voice: voice(env),
   };
 }

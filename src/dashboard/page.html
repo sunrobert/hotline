@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Hotline</title>
+<style>
+  :root {
+    --bg: #f4f3ee; --surface: #ffffff; --ink: #15171a; --muted: #686d75; --line: #e2e0d8;
+    --accent: #0b6e4f; --accent-ink: #ffffff; --warn: #a85a08; --danger: #b3261e; --neutral: #5f646c;
+    --tint-accent: #e3f1eb; --tint-warn: #f8ecd9; --tint-danger: #f8e2e0; --tint-neutral: #eceae4;
+    --shadow: 0 1px 2px rgba(20, 22, 26, .06), 0 8px 24px rgba(20, 22, 26, .04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1113; --surface: #181b1e; --ink: #edebe5; --muted: #9a9fa6; --line: #2a2e33;
+      --accent: #4cc39a; --accent-ink: #06231a; --warn: #f0a548; --danger: #f2766b; --neutral: #a4a9b0;
+      --tint-accent: #153329; --tint-warn: #3a2a12; --tint-danger: #3d1d1a; --tint-neutral: #25282c;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .92em; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+  .brand { display: flex; align-items: baseline; gap: 12px; }
+  h1 { font-size: 22px; letter-spacing: -.01em; margin: 0; font-weight: 650; }
+  .tagline { color: var(--muted); }
+  .meta { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+  .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill.ok { color: var(--accent); background: var(--tint-accent); }
+  .pill.warn { color: var(--warn); background: var(--tint-warn); }
+  .pill.bad { color: var(--danger); background: var(--tint-danger); }
+  .pill.off { color: var(--neutral); background: var(--tint-neutral); }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; box-shadow: var(--shadow); min-width: 0; }
+  .card h2 { margin: 0 0 12px; font-size: 12px; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+  .balance { font-size: 44px; line-height: 1.05; font-weight: 650; letter-spacing: -.02em; }
+  .balance small { font-size: 16px; font-weight: 500; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 6px; overflow-wrap: anywhere; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .spread { justify-content: space-between; }
+  button {
+    font: inherit; font-weight: 600; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+    padding: 9px 14px; cursor: pointer; min-height: 40px;
+  }
+  button:hover { border-color: var(--muted); }
+  button:disabled { opacity: .55; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  button.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+  button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  input {
+    font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; min-height: 40px; min-width: 0;
+  }
+  dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; margin: 0; }
+  dt { color: var(--muted); } dd { margin: 0; text-align: right; font-weight: 600; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .chip { border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 13px; }
+  .chip span { color: var(--muted); }
+  .transcript { margin-top: 12px; max-height: 190px; overflow-y: auto; border-top: 1px solid var(--line); padding-top: 10px; display: grid; gap: 6px; }
+  .line { font-size: 14px; overflow-wrap: anywhere; }
+  .line b { font-weight: 650; margin-right: 6px; }
+  .line.you b { color: var(--muted); }
+  .line.agent b { color: var(--accent); }
+  .note { color: var(--muted); font-size: 13px; }
+  .error { color: var(--danger); font-size: 13px; margin-top: 8px; overflow-wrap: anywhere; }
+  section { margin-top: 16px; }
+  .pending { border-color: var(--warn); }
+  .pending-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 0; border-top: 1px solid var(--line); }
+  .pending-item:first-of-type { border-top: 0; }
+  .table-wrap { overflow-x: auto; margin: 0 -18px -18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 18px; border-top: 1px solid var(--line); white-space: nowrap; }
+  th { font-size: 12px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); border-top: 0; }
+  td.wrapok { white-space: normal; min-width: 180px; }
+  td.num { text-align: right; }
+  a { color: var(--accent); }
+  .empty { color: var(--muted); padding: 18px; }
+  .gate { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+  .gate .card { width: 100%; max-width: 380px; }
+  .gate form { display: grid; gap: 10px; margin-top: 12px; }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: no-preference) { .ringing { animation: pulse 1.2s ease-in-out infinite; } }
+  @keyframes pulse { 50% { opacity: .55; } }
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate" hidden>
+  <div class="card">
+    <h1>Hotline</h1>
+    <p class="note">Enter the dashboard token from your <span class="mono">.env.local</span>. It stays in this tab only.</p>
+    <form id="gate-form">
+      <input id="gate-token" type="password" autocomplete="off" placeholder="Dashboard token" aria-label="Dashboard token" required>
+      <button class="primary" type="submit">Open dashboard</button>
+      <div class="error" id="gate-error" hidden></div>
+    </form>
+  </div>
+</div>
+
+<div class="wrap" id="app" hidden>
+  <header>
+    <div class="brand">
+      <h1>Hotline</h1>
+      <span class="tagline">calls you before it spends</span>
+    </div>
+    <div class="meta">
+      <span>Arc testnet</span>
+      <a id="wallet-link" class="mono" target="_blank" rel="noopener"></a>
+      <span class="pill off" id="agent-state">Loading</span>
+      <button id="unpause" hidden>Unpause</button>
+      <button id="signout" title="Forget the token in this tab">Lock</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Balance</h2>
+      <div class="balance"><span id="balance">–</span><small>USDC</small></div>
+      <div class="sub" id="balance-sub"></div>
+      <div id="simulate" hidden>
+        <div class="row" style="margin-top:14px">
+          <input id="sim-amount" type="number" min="0" step="any" value="200" aria-label="Simulated deposit amount in USDC" style="width:110px">
+          <button id="sim-button">Simulate deposit</button>
+        </div>
+        <div class="note" style="margin-top:6px">Development only. Runs the deposit rule without moving funds.</div>
+        <div class="error" id="sim-error" hidden></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row spread">
+        <h2 style="margin:0">Voice</h2>
+        <span class="pill off" id="call-state">Idle</span>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="call">Call Hotline</button>
+        <button class="danger" id="hangup" hidden>Hang up</button>
+      </div>
+      <div class="note" id="call-note" style="margin-top:8px">Talk to the agent from this browser. It will ask for your microphone.</div>
+      <div class="error" id="call-error" hidden></div>
+      <div class="transcript" id="transcript" hidden aria-live="polite"></div>
+    </div>
+
+    <div class="card">
+      <h2>Limits</h2>
+      <dl id="limits"></dl>
+      <div class="chips" id="recipients"></div>
+    </div>
+  </div>
+
+  <section class="card pending" id="pending" hidden>
+    <h2>Waiting for your approval</h2>
+    <div id="pending-list"></div>
+    <div class="note">Approvals happen by voice, with your PIN. Nothing here can approve a send.</div>
+  </section>
+
+  <section class="card">
+    <h2>Ledger</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Time</th><th>Code</th><th>From</th><th>Action</th><th>Decision</th><th>Rule</th><th>Status</th><th>Transaction</th></tr></thead>
+        <tbody id="ledger"></tbody>
+      </table>
+      <div class="empty" id="ledger-empty" hidden>Nothing yet. Every decision the agent makes will appear here.</div>
+    </div>
+  </section>
+</div>
+
+<script type="module">
+const SDK_URL = "https://cdn.jsdelivr.net/npm/@elevenlabs/client@1.36.0/+esm";
+const TOKEN_KEY = "hotline.dashboard.token";
+const $ = (id) => document.getElementById(id);
+
+// ---------- token ----------
+const store = {
+  get() { try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch { return this.memory || ""; } },
+  set(v) { this.memory = v; try { v ? sessionStorage.setItem(TOKEN_KEY, v) : sessionStorage.removeItem(TOKEN_KEY); } catch { /* private mode */ } },
+};
+
+class Unauthorized extends Error {}
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: { Authorization: "Bearer " + store.get(), ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) throw new Unauthorized();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || data.error || ("Request failed: " + res.status));
+  return data;
+}
+
+function el(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") node.className = v; else if (k === "text") node.textContent = v; else node.setAttribute(k, v);
+  }
+  for (const child of children) node.append(child);
+  return node;
+}
+const show = (node, on) => { node.hidden = !on; };
+const setError = (node, message) => { node.textContent = message || ""; show(node, Boolean(message)); };
+
+// ---------- gate ----------
+let timer = null;
+function lock(message) {
+  clearInterval(timer); timer = null;
+  store.set("");
+  show($("app"), false); show($("gate"), true);
+  setError($("gate-error"), message);
+  $("gate-token").value = ""; $("gate-token").focus();
+}
+$("gate-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  store.set($("gate-token").value.trim());
+  await open();
+});
+$("signout").addEventListener("click", () => { void hangUp(); lock(""); });
+
+async function open() {
+  try { render(await api("GET", "/api/state")); }
+  catch (err) { lock(err instanceof Unauthorized ? "That token was not accepted." : "Could not reach the server."); return; }
+  show($("gate"), false); show($("app"), true);
+  clearInterval(timer);
+  timer = setInterval(refresh, 2000);
+}
+async function refresh() {
+  try { render(await api("GET", "/api/state")); }
+  catch (err) { if (err instanceof Unauthorized) lock("The token is no longer accepted."); }
+}
+
+// ---------- render ----------
+const usdc = (n) => Number(n).toLocaleString(undefined, { maximumFractionDigits: 6 });
+const DECISION = { AUTO: "ok", CALL: "warn", BLOCK: "bad", observed: "off" };
+const STATUS_WORDS = {
+  pending: "waiting for you", approved: "approved", submitted: "sending", complete: "sent", failed: "failed",
+  cancelled: "cancelled", expired: "expired", expired_no_answer: "no answer", blocked: "blocked", observed: "noted",
+};
+const describe = (e) => e.kind === "deposit" ? `Deposit of ${usdc(e.amount_usdc)} USDC` : `Send ${usdc(e.amount_usdc)} USDC to ${e.to_label ?? "?"}`;
+
+function render(state) {
+  $("balance").textContent = usdc(state.balance_usdc);
+  $("balance-sub").textContent = `${usdc(state.rules.gas_reserve_usdc)} USDC is always kept back for gas.`;
+  const link = $("wallet-link");
+  link.textContent = state.wallet_address.slice(0, 6) + "…" + state.wallet_address.slice(-4);
+  link.href = "https://explorer.testnet.arc.io/address/" + state.wallet_address;
+  link.title = "Agent wallet " + state.wallet_address;
+
+  const pill = $("agent-state");
+  pill.className = "pill " + (state.paused ? "bad" : "ok");
+  pill.textContent = state.paused ? "Paused" : "Active";
+  show($("unpause"), state.paused);
+  show($("simulate"), state.simulate_allowed);
+  if (!state.voice_configured && !conversation) {
+    $("call").disabled = true;
+    $("call-note").textContent = "Voice is not configured on the server yet.";
+  }
+
+  const r = state.rules;
+  $("limits").replaceChildren(
+    ...[["Auto-approve up to", r.approval_threshold_usdc], ["Per transaction cap", r.per_tx_cap_usdc], ["Daily cap", r.daily_cap_usdc],
+        ["Keep on hand, sweep the rest", r.sweep_threshold_usdc]]
+      .flatMap(([label, value]) => [el("dt", { text: label }), el("dd", { text: usdc(value) + " USDC" })]),
+  );
+  $("recipients").replaceChildren(...r.recipients.map((x) => {
+    const chip = el("span", { class: "chip", text: x.label });
+    if (x.aliases?.length) chip.append(" ", el("span", { text: x.aliases.join(" · ") }));
+    return chip;
+  }));
+
+  show($("pending"), state.pending_actions.length > 0);
+  $("pending-list").replaceChildren(...state.pending_actions.map((a) => el("div", { class: "pending-item" },
+    el("div", {}, el("strong", { text: a.summary }), " ", el("span", { class: "note", text: a.rule === "stream_source" ? "from your sweep rule" : "over your auto-approve limit" })),
+    el("span", { class: "mono note", text: a.action_code }),
+  )));
+
+  show($("ledger-empty"), state.ledger.length === 0);
+  $("ledger").replaceChildren(...state.ledger.map((e) => {
+    const tx = e.explorer_url
+      ? el("a", { href: e.explorer_url, target: "_blank", rel: "noopener", class: "mono", text: e.tx_hash.slice(0, 10) + "…" })
+      : el("span", { class: "note", text: e.error ? e.error.slice(0, 60) : "–" });
+    return el("tr", {},
+      el("td", { class: "note", text: new Date(e.time).toLocaleTimeString() }),
+      el("td", { class: "mono", text: e.code }),
+      el("td", { text: e.source }),
+      el("td", { class: "wrapok", text: describe(e) }),
+      el("td", {}, el("span", { class: "pill " + (DECISION[e.decision] ?? "off"), text: e.decision })),
+      el("td", { class: "mono note", text: e.reason && e.reason !== e.rule ? `${e.rule} · ${e.reason}` : e.rule }),
+      el("td", { text: STATUS_WORDS[e.status] ?? e.status }),
+      el("td", {}, tx),
+    );
+  }));
+}
+
+// ---------- actions ----------
+$("unpause").addEventListener("click", async () => { try { await api("POST", "/api/unpause"); await refresh(); } catch { /* next poll shows it */ } });
+$("sim-button").addEventListener("click", async () => {
+  setError($("sim-error"), "");
+  try { await api("POST", "/api/simulate-deposit", { amount_usdc: Number($("sim-amount").value) }); await refresh(); }
+  catch (err) { setError($("sim-error"), err.message); }
+});
+
+// ---------- voice ----------
+let conversation = null;
+let conversationId = null;
+function callState(kind, text) { const p = $("call-state"); p.className = "pill " + kind + (text === "Connecting" ? " ringing" : ""); p.textContent = text; }
+function say(who, text) {
+  if (!text) return;
+  const box = $("transcript");
+  show(box, true);
+  box.append(el("div", { class: "line " + who }, el("b", { text: who === "agent" ? "Hotline" : "You" }), text));
+  box.scrollTop = box.scrollHeight;
+}
+function resetCall() {
+  conversation = null; conversationId = null;
+  show($("hangup"), false); show($("call"), true); $("call").disabled = false;
+  callState("off", "Idle");
+}
+async function hangUp() {
+  const live = conversation, id = conversationId;
+  if (!live) return;
+  try { await live.endSession(); } catch { /* already gone */ }
+  if (id) { try { await api("POST", "/api/call/end", { conversation_id: id }); } catch { /* best effort */ } }
+  resetCall();
+}
+
+$("call").addEventListener("click", async () => {
+  setError($("call-error"), "");
+  $("call").disabled = true;
+  $("transcript").replaceChildren(); show($("transcript"), false);
+  callState("warn", "Connecting");
+  try {
+    const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mic.getTracks().forEach((track) => track.stop());
+    const [start, sdk] = await Promise.all([api("POST", "/api/call/start"), import(SDK_URL)]);
+    conversation = await sdk.Conversation.startSession({
+      conversationToken: start.conversation_token,
+      connectionType: "webrtc",
+      dynamicVariables: start.dynamic_variables,
+      onConnect: async ({ conversationId: id }) => {
+        conversationId = id;
+        // Until this lands the agent's tool calls are refused, so do it before anything else.
+        try { await api("POST", "/api/call/bind", { conversation_id: id }); }
+        catch (err) { setError($("call-error"), "Connected, but the server did not accept this call: " + err.message); }
+      },
+      onMessage: (m) => say((m.role ?? m.source) === "user" ? "you" : "agent", m.message),
+      onModeChange: ({ mode }) => callState("ok", mode === "speaking" ? "Hotline is speaking" : "Listening"),
+      onStatusChange: ({ status }) => { if (status === "connected") callState("ok", "Connected"); },
+      onError: (message) => setError($("call-error"), String(message)),
+      onDisconnect: () => {
+        const id = conversationId;
+        if (id) void api("POST", "/api/call/end", { conversation_id: id }).catch(() => {});
+        resetCall();
+      },
+    });
+    show($("call"), false); show($("hangup"), true);
+  } catch (err) {
+    resetCall();
+    setError($("call-error"), err?.name === "NotAllowedError" ? "Microphone access was blocked. Allow it for this page and try again." : (err?.message || "The call could not start."));
+  }
+});
+$("hangup").addEventListener("click", () => { void hangUp(); });
+
+// ---------- boot ----------
+if (store.get()) void open(); else lock("");
+</script>
+</body>
+</html>

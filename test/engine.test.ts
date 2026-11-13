@@ -481,3 +481,45 @@ test("statusOf reports an action's lifecycle status by code", async () => {
   assert.equal(engine.statusOf(r.action_code), "pending");
   assert.equal(engine.statusOf("H-NOPE"), undefined);
 });
+
+// ---------- reads for the dashboard, and browser-call binding ----------
+
+test("history lists ledger entries newest first, in USDC, with no recipient address", async () => {
+  const { engine } = setup();
+  const a = await engine.propose({ kind: "send", toLabel: "alice", amountUsdc: 5, source: "voice" });
+  await engine.idle();
+  const b = await engine.propose({ kind: "send", toLabel: "alice", amountUsdc: 300, source: "text" });
+  const rows = engine.history(10);
+  assert.deepEqual(rows.map((r) => r.code), [b.action_code, a.action_code]);
+  assert.deepEqual(
+    { source: rows[0]?.source, amount_usdc: rows[0]?.amount_usdc, decision: rows[0]?.decision, rule: rows[0]?.rule, status: rows[0]?.status, tx_hash: rows[0]?.tx_hash },
+    { source: "text", amount_usdc: 300, decision: "BLOCK", rule: "per_tx_cap", status: "blocked", tx_hash: null },
+  );
+  assert.match(rows[1]?.tx_hash ?? "", /^0x/);
+  assert.doesNotMatch(JSON.stringify(rows), new RegExp(ALICE, "i"));
+  assert.equal(engine.history(1).length, 1);
+});
+
+test("previewPending recomputes a waiting sweep without binding it; null when none is waiting or one is live", async () => {
+  const { deposit, engine, wallet, ledger } = setup({ balance: 60 * U });
+  assert.equal(await engine.previewPending(), null);
+  await deposit(200 * U);
+  wallet.balanceMicros = 200 * U;
+  const preview = await engine.previewPending();
+  assert.equal(preview?.amount_usdc, 99);
+  assert.equal(ledger.pendingSweep()?.conversation_id, null);
+  await engine.present(ledger.pendingSweep()!.code, "out-1");
+  assert.equal(await engine.previewPending(), null);
+});
+
+test("bindPendingTo ties a waiting sweep to a conversation without recomputing; null when none is waiting", async () => {
+  const { deposit, engine, wallet, ledger } = setup({ balance: 60 * U });
+  assert.equal(engine.bindPendingTo("web-1"), null);
+  await deposit(200 * U);
+  wallet.balanceMicros = 500 * U;
+  const bound = engine.bindPendingTo("web-1");
+  assert.equal(bound?.amount_usdc, 159);
+  assert.equal(ledger.pendingSweep()?.conversation_id, "web-1");
+  assert.equal(ledger.pendingSweep()?.call_live, 1);
+  assert.equal(engine.bindPendingTo("web-2"), null, "already on a live call");
+});

@@ -53,6 +53,23 @@ export interface ActionView {
   tx_hash: string | null;
 }
 
+/** One ledger row as shown on the dashboard. */
+export interface LedgerEntry {
+  code: string;
+  /** Epoch milliseconds when the action was created. */
+  time: number;
+  source: string;
+  kind: string;
+  to_label: string | null;
+  amount_usdc: number;
+  decision: string;
+  rule: string;
+  status: string;
+  reason: string | null;
+  tx_hash: string | null;
+  error: string | null;
+}
+
 export interface ProposeRequest {
   kind: "send";
   toLabel: string;
@@ -267,6 +284,41 @@ export class Engine {
     if (!waiting || waiting.call_live) return null;
     const presented = await this.present(waiting.code, conversationId);
     return presented ? view(presented) : null;
+  }
+
+  // ---------- reads and binding for the dashboard ----------
+
+  /** The agent's own address. Public by nature; recipients' addresses are never exposed. */
+  get walletAddress(): string {
+    return this.#wallet.address;
+  }
+
+  /** The ledger, newest first, for display. Carries labels, never recipient addresses. */
+  history(limit: number): LedgerEntry[] {
+    return this.#ledger.recent(limit).map((r) => ({
+      code: r.code, time: r.created_at, source: r.source, kind: r.kind, to_label: r.to_label,
+      amount_usdc: fromMicros(r.amount), decision: r.decision, rule: r.rule, status: r.status,
+      reason: r.reason, tx_hash: r.tx_hash, error: r.error,
+    }));
+  }
+
+  /** A waiting sweep at its current amount, without tying it to any call. For telling the agent before a call connects. */
+  async previewPending(): Promise<ActionView | null> {
+    const waiting = this.#ledger.pendingSweep();
+    if (!waiting || waiting.call_live) return null;
+    const row = await this.prepareCall(waiting.code);
+    return row ? view(row) : null;
+  }
+
+  /**
+   * Tie the waiting sweep to a call that has just connected. Does not recompute: the agent
+   * was already told an amount by previewPending, and that is the amount a yes approves.
+   */
+  bindPendingTo(conversationId: string): ActionView | null {
+    const waiting = this.#ledger.pendingSweep();
+    if (!waiting || waiting.call_live) return null;
+    this.bindCall(waiting.code, conversationId);
+    return view(this.#ledger.get(waiting.code)!);
   }
 
   callEnded(conversationId: string): void {

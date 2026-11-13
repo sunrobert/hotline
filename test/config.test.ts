@@ -90,3 +90,11 @@ test("the phone provider defaults to twilio and can be set to sip_trunk, and not
   assert.equal(loadConfig(env({ ...base, ELEVENLABS_PHONE_PROVIDER: "sip_trunk" })).voice?.provider, "sip_trunk");
   assert.throws(() => loadConfig(env({ ...base, ELEVENLABS_PHONE_PROVIDER: "carrier-pigeon" })), /ELEVENLABS_PHONE_PROVIDER/);
 });
+
+test("browser calling needs only the ElevenLabs key and agent id, not a phone number", () => {
+  assert.equal(loadConfig(env()).agent, null);
+  assert.equal(loadConfig(env({ ELEVENLABS_API_KEY: "k" })).agent, null);
+  const cfg = loadConfig(env({ ELEVENLABS_API_KEY: "k", ELEVENLABS_AGENT_ID: "agent_1" }));
+  assert.deepEqual(cfg.agent, { apiKey: "k", agentId: "agent_1" });
+  assert.equal(cfg.voice, null);
+});

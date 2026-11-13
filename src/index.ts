@@ -10,6 +10,7 @@ import { formatUsdc } from "./money.ts";
 import { CallQueue } from "./calls/queue.ts";
 import { createDialer } from "./calls/elevenlabs.ts";
 import { startDepositPoller } from "./deposits/watcher.ts";
+import { createTokenProvider } from "./dashboard/token.ts";
 
 const cfg = loadConfig(process.env);
 
@@ -53,9 +54,15 @@ startDepositPoller({
   },
 });
 
-const app = createApp({ engine, cfg: cfg.server, isOutbound: (id) => queue?.isOutbound(id) ?? false });
+const app = createApp({
+  engine, cfg: cfg.server,
+  isOutbound: (id) => queue?.isOutbound(id) ?? false,
+  getConversationToken: cfg.agent ? createTokenProvider(cfg.agent) : null,
+});
 serve({ fetch: app.fetch, port: cfg.port }, (info) => {
   console.log(`[hotline] listening on :${info.port}`);
+  console.log(`[hotline] dashboard http://localhost:${info.port}/dashboard (sign in with DASHBOARD_TOKEN from .env.local)`);
   console.log(`[hotline] agent wallet ${wallet.address} on Arc testnet`);
-  console.log(`[hotline] voice ${cfg.voice ? `on, approvals ring ${cfg.ownerNumber.replace(/\d(?=\d{4})/g, "*")}` : "off (no agent or phone number configured)"}`);
+  console.log(`[hotline] browser calls ${cfg.agent ? "on" : "off (no ElevenLabs key or agent id)"}`);
+  console.log(`[hotline] phone calls ${cfg.voice ? `on, approvals ring ${cfg.ownerNumber.replace(/\d(?=\d{4})/g, "*")}` : "off (no phone number attached)"}`);
 });
