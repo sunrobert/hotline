@@ -186,11 +186,11 @@ npm start          # after setting OWNER_NUMBERS in .env.local; then open http:/
 npm run agent      # create or update the voice agent (needs ELEVENLABS_API_KEY, PUBLIC_URL)
 npm run agent:test # behaviour tests against the live agent
 npm run phone      # attach your Twilio number to the agent (needs the three TWILIO_ values)
-npm run demo:deposit -- 200   # send testnet USDC from the sender wallet to the agent
+npm run demo:deposit -- 20    # send testnet USDC from the sender wallet to the agent
 npm run tunnel     # in a second terminal: free public HTTPS address for this laptop; repoints the agent
 ```
 
-Fund the `sender` and `agent` addresses with testnet USDC at https://faucet.circle.com (network: Arc Testnet).
+Fund the `sender` and `agent` addresses with testnet USDC at https://faucet.circle.com (network: Arc Testnet). The faucet gives about 40 USDC per address, so the demo limits are small: 5 USDC auto-approve, 50 per transaction, 200 a day, and anything over 10 swept to savings.
 
 ## Tool API
 

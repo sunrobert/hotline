@@ -29,3 +29,12 @@ test("dailyResetBoundary returns the most recent reset hour at or before now", (
   assert.equal(dailyResetBoundary(now, 15), Date.UTC(2026, 10, 13, 15, 0));
   assert.equal(dailyResetBoundary(now, 20), Date.UTC(2026, 10, 12, 20, 0));
 });
+
+test("a sweep is rounded down to whole USDC so the agent never reads out gas dust", () => {
+  // 26.37 on hand after gas: 15.37 is excess, but the agent proposes 15
+  assert.equal(computeSweep({ balance: 26_370_000, committed: 0, ...rule, threshold: 10 * U }), 15 * U);
+});
+
+test("an excess under one whole USDC after the gas reserve is not swept", () => {
+  assert.equal(computeSweep({ balance: 11_900_000, committed: 0, ...rule, threshold: 10 * U }), null);
+});

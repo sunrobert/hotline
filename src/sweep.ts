@@ -14,7 +14,9 @@ export interface SweepInput {
 export function computeSweep({ balance, committed, threshold, gasReserve }: SweepInput): number | null {
   const available = balance - committed;
   if (available <= threshold) return null;
-  const amount = available - threshold - gasReserve;
+  // Whole USDC only. Gas leaves fractions behind, and "fourteen point nine eight" is a bad thing
+  // to hear on an approval call. The fraction stays in the wallet as extra buffer.
+  const amount = Math.floor((available - threshold - gasReserve) / 1_000_000) * 1_000_000;
   return amount > 0 ? amount : null;
 }
 
