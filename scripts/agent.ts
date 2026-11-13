@@ -6,7 +6,8 @@
 //
 // Sends HOTLINE_SECRET to ElevenLabs' secret store so tool calls can carry it. Prints ids only.
 
-import { readFileSync, appendFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { setEnvValue } from "./tunnel-lib.ts";
 import { buildTools, buildAgent, TOOL_SECRET_NAME } from "../src/agent/definition.ts";
 
 const API = "https://api.elevenlabs.io";
@@ -82,9 +83,7 @@ if (agentId) {
 
 // Remember the id locally for the backend and other scripts.
 const ENV = ".env.local";
-if (existsSync(ENV) && !/^ELEVENLABS_AGENT_ID=/m.test(readFileSync(ENV, "utf8"))) {
-  appendFileSync(ENV, `ELEVENLABS_AGENT_ID=${agentId}\n`);
-}
+if (existsSync(ENV)) writeFileSync(ENV, setEnvValue(readFileSync(ENV, "utf8"), "ELEVENLABS_AGENT_ID", agentId), { mode: 0o600 });
 
 console.log(`\nllm        ${llm}`);
 console.log(`tools ->   ${baseUrl}/tools/*${baseUrl.endsWith(".invalid") ? "   (placeholder: set PUBLIC_URL once the backend is deployed, then re-run)" : ""}`);

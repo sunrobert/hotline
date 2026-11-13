@@ -7,7 +7,8 @@
 // Sends the provider credentials to ElevenLabs, which is how its phone integrations work.
 // Prints ids and a masked number only.
 
-import { readFileSync, appendFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { setEnvValue } from "./tunnel-lib.ts";
 import { normalizeE164 } from "../src/phone.ts";
 
 const API = "https://api.elevenlabs.io";
@@ -71,8 +72,9 @@ if (id) {
 const ENV = ".env.local";
 if (existsSync(ENV)) {
   const text = readFileSync(ENV, "utf8");
-  if (!/^ELEVENLABS_PHONE_NUMBER_ID=/m.test(text)) appendFileSync(ENV, `ELEVENLABS_PHONE_NUMBER_ID=${id}\nELEVENLABS_PHONE_PROVIDER=${provider}\n`);
-  else if (!text.includes(`ELEVENLABS_PHONE_NUMBER_ID=${id}`)) console.log(`note: .env.local has a different ELEVENLABS_PHONE_NUMBER_ID; update it to ${id}`);
+  // setEnvValue starts a new line when the file has no trailing newline. Appending directly once
+  // glued this onto the end of the SIP password line.
+  writeFileSync(ENV, setEnvValue(setEnvValue(text, "ELEVENLABS_PHONE_NUMBER_ID", id), "ELEVENLABS_PHONE_PROVIDER", provider), { mode: 0o600 });
 }
 console.log(`\nInbound calls to ${masked} now reach the Hotline agent.`);
 console.log("Outbound approval calls will use it once the server is restarted.");
