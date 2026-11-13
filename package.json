@@ -19,7 +19,8 @@
     "agent:test": "node --env-file-if-exists=.env.local scripts/agent-tests.ts",
     "phone": "node --env-file-if-exists=.env.local scripts/phone.ts",
     "demo:deposit": "node --env-file-if-exists=.env.local scripts/deposit.ts",
-    "tunnel": "node scripts/tunnel.ts"
+    "tunnel": "node scripts/tunnel.ts",
+    "reset-demo": "node --env-file-if-exists=.env.local scripts/reset-demo.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.8",
