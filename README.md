@@ -187,6 +187,7 @@ npm run agent      # create or update the voice agent (needs ELEVENLABS_API_KEY,
 npm run agent:test # behaviour tests against the live agent
 npm run phone      # attach your Twilio number to the agent (needs the three TWILIO_ values)
 npm run demo:deposit -- 200   # send testnet USDC from the sender wallet to the agent
+npm run tunnel     # in a second terminal: free public HTTPS address for this laptop; repoints the agent
 ```
 
 Fund the `sender` and `agent` addresses with testnet USDC at https://faucet.circle.com (network: Arc Testnet).
