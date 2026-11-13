@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 // HTTP surface. The voice agent reaches the engine only through /tools/*.
 //
 // Every tool call must (1) carry the shared secret and (2) come from a conversation
@@ -17,6 +18,14 @@ import { DEFAULT_OPENING_LINE } from "./agent/definition.ts";
 import { DASHBOARD_HTML } from "./dashboard/page.ts";
 import { explorerTx } from "./wallet/arc.ts";
 import { toMicros, fromMicros } from "./money.ts";
+
+const dashboardFile = (name: string) => readFileSync(new URL(`./dashboard/${name}`, import.meta.url));
+const SOUNDS: Record<string, Buffer> = {
+  "intro.mp3": dashboardFile("sounds/intro.mp3"),
+  "confirm.mp3": dashboardFile("sounds/confirm.mp3"),
+  "blocked.mp3": dashboardFile("sounds/blocked.mp3"),
+};
+const SOUNDS_JS = dashboardFile("sounds.js").toString("utf8");
 
 export interface AppDeps {
   engine: Engine;
@@ -162,6 +171,16 @@ export function createApp(deps: AppDeps): Hono {
   // ---------- dashboard ----------
 
   app.get("/dashboard", (c) => c.html(DASHBOARD_HTML));
+
+  // Original sounds made with ElevenLabs sound effects. Only these three names exist; nothing
+  // else on disk can be requested through this route.
+  app.get("/dashboard/sounds/:file", (c) => {
+    const audio = Object.hasOwn(SOUNDS, c.req.param("file")) ? SOUNDS[c.req.param("file")] : undefined;
+    if (!audio) return c.json({ error: "not_found" }, 404);
+    return c.body(new Uint8Array(audio), 200, { "content-type": "audio/mpeg", "cache-control": "public, max-age=86400" });
+  });
+  app.get("/dashboard/sounds.js", (c) =>
+    c.body(SOUNDS_JS, 200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-cache" }));
 
   // Everything under /api needs the dashboard token, in a header. Never in the URL, where it would end up in logs.
   app.use("/api/*", async (c, next) => {

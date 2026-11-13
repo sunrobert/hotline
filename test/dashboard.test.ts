@@ -277,3 +277,29 @@ test("the token provider throws on an error status or a missing token, without e
   const empty = (async () => new Response(JSON.stringify({}), { status: 200 })) as unknown as typeof fetch;
   await assert.rejects(createTokenProvider({ apiKey: "k", agentId: "a", fetch: empty })(), /no token/);
 });
+
+// ---------- sounds ----------
+
+test("the three sound files are served as audio without the token", async () => {
+  const { api } = harness();
+  for (const name of ["intro", "confirm", "blocked"]) {
+    const r = await api("GET", `/dashboard/sounds/${name}.mp3`, undefined, null);
+    assert.equal(r.status, 200, name);
+    assert.equal(r.type, "audio/mpeg");
+  }
+});
+
+test("only those three sounds can be fetched; nothing else on disk is reachable", async () => {
+  const { api } = harness();
+  for (const path of ["/dashboard/sounds/other.mp3", "/dashboard/sounds/..%2F..%2Fpackage.json", "/dashboard/sounds/intro.wav", "/dashboard/sounds/%2e%2e%2fpage.html"]) {
+    assert.equal((await api("GET", path, undefined, null)).status, 404, path);
+  }
+});
+
+test("the sound logic is served to the page as a JavaScript module", async () => {
+  const { api } = harness();
+  const r = await api("GET", "/dashboard/sounds.js", undefined, null);
+  assert.equal(r.status, 200);
+  assert.match(r.type, /javascript/);
+  assert.match(r.text, /export function soundsFor/);
+});

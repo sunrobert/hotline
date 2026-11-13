@@ -76,6 +76,10 @@ The agent runs on **ElevenLabs Agents**. Its whole definition is code in [`src/a
 - **Model:** Claude Sonnet 5.5, temperature 0.
 - **Call start.** [`/hooks/conversation-init`](src/server.ts) tells the agent whether the caller is the owner and whether an approval is waiting, and binds that approval to the call.
 
+### Sound
+
+The dashboard plays three original sounds made with ElevenLabs sound effects: a short R&B-style sting when money arrives and the agent is about to ring the owner (and when a browser call starts), a two-tone chime when a send completes on chain, and a soft low tone when a limit blocks a send. Which sound plays is decided by comparing two refreshes of the ledger ([`src/dashboard/sounds.js`](src/dashboard/sounds.js), unit-tested), so opening the page never replays history. A header toggle turns sound off. Phone calls themselves can only use ElevenLabs' built-in sounds, so the custom ones play on the dashboard.
+
 ### Agent behaviour tests
 
 `npm run agent:test` runs [`scripts/agent-tests.ts`](scripts/agent-tests.ts) against the live agent on ElevenLabs' testing API. Each test replays a conversation to a decision point and checks the agent's next tool call, or that it makes none. Current result: **27 of 27 passing.**

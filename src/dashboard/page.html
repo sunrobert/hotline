@@ -118,6 +118,7 @@
       <a id="wallet-link" class="mono" target="_blank" rel="noopener"></a>
       <span class="pill off" id="agent-state">Loading</span>
       <button id="unpause" hidden>Unpause</button>
+      <button id="sound" title="Sounds for incoming approvals, completed sends, and blocked sends" aria-pressed="true">Sound on</button>
       <button id="signout" title="Forget the token in this tab">Lock</button>
     </div>
   </header>
@@ -177,6 +178,8 @@
 </div>
 
 <script type="module">
+import { soundsFor } from "/dashboard/sounds.js";
+
 const SDK_URL = "https://cdn.jsdelivr.net/npm/@elevenlabs/client@1.36.0/+esm";
 const TOKEN_KEY = "hotline.dashboard.token";
 const $ = (id) => document.getElementById(id);
@@ -213,6 +216,35 @@ const setError = (node, message) => { node.textContent = message || ""; show(nod
 
 // ---------- gate ----------
 let timer = null;
+
+// ---------- sound ----------
+// Original sounds made with ElevenLabs sound effects. Whether they play is a per-viewer
+// preference, so it lives in this browser only.
+const SOUND_KEY = "hotline.dashboard.sound";
+const audio = Object.fromEntries(["intro", "confirm", "blocked"].map((name) => {
+  const a = new Audio(`/dashboard/sounds/${name}.mp3`);
+  a.preload = "auto";
+  a.volume = name === "intro" ? 0.7 : 0.6;
+  return [name, a];
+}));
+let soundOn = (() => { try { return localStorage.getItem(SOUND_KEY) !== "off"; } catch { return true; } })();
+let lastLedger = null;
+function play(name) {
+  if (!soundOn || !audio[name]) return;
+  audio[name].currentTime = 0;
+  audio[name].play().catch(() => { /* browser blocked autoplay until the page is clicked */ });
+}
+function paintSound() {
+  $("sound").textContent = soundOn ? "Sound on" : "Sound off";
+  $("sound").setAttribute("aria-pressed", String(soundOn));
+}
+paintSound();
+$("sound").addEventListener("click", () => {
+  soundOn = !soundOn;
+  try { localStorage.setItem(SOUND_KEY, soundOn ? "on" : "off"); } catch { /* private mode */ }
+  paintSound();
+  if (soundOn) play("confirm");
+});
 function lock(message) {
   clearInterval(timer); timer = null;
   store.set("");
@@ -228,6 +260,7 @@ $("gate-form").addEventListener("submit", async (event) => {
 $("signout").addEventListener("click", () => { void hangUp(); lock(""); });
 
 async function open() {
+  lastLedger = null;
   try { render(await api("GET", "/api/state")); }
   catch (err) { lock(err instanceof Unauthorized ? "That token was not accepted." : "Could not reach the server."); return; }
   show($("gate"), false); show($("app"), true);
@@ -249,6 +282,8 @@ const STATUS_WORDS = {
 const describe = (e) => e.kind === "deposit" ? `Deposit of ${usdc(e.amount_usdc)} USDC` : `Send ${usdc(e.amount_usdc)} USDC to ${e.to_label ?? "?"}`;
 
 function render(state) {
+  for (const name of soundsFor(lastLedger, state.ledger)) play(name);
+  lastLedger = state.ledger;
   $("balance").textContent = usdc(state.balance_usdc);
   $("balance-sub").textContent = `${usdc(state.rules.gas_reserve_usdc)} USDC is always kept back for gas.`;
   const link = $("wallet-link");
@@ -335,6 +370,7 @@ async function hangUp() {
 }
 
 $("call").addEventListener("click", async () => {
+  play("intro");
   setError($("call-error"), "");
   $("call").disabled = true;
   $("transcript").replaceChildren(); show($("transcript"), false);
