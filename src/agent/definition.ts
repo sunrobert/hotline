@@ -191,7 +191,7 @@ export function buildAgent(opts: { toolIds: string[]; llm: string; name?: string
           },
         },
       },
-      tts: { model_id: "eleven_flash_v2_5" },
+      tts: { model_id: "eleven_flash_v2" },
       turn: { turn_timeout: 7, silence_end_call_timeout: 30 },
       conversation: { max_duration_seconds: 300 },
       language_presets: Object.fromEntries(

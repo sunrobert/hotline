@@ -101,8 +101,10 @@ test("the default language is English and the presets cover Mandarin and the oth
   assert.ok(!presets.includes("en"));
 });
 
-test("a multilingual speech model is selected", () => {
-  assert.match(agent().conversation_config.tts.model_id, /v2_5|multilingual|v3|v4/);
+test("the base speech model is the one ElevenLabs requires for an English-default agent", () => {
+  // The platform rejects anything else ("English Agents must use turbo or flash v2") and
+  // switches to its v2.5 multilingual model by itself for the preset languages.
+  assert.equal(agent().conversation_config.tts.model_id, "eleven_flash_v2");
 });
 
 test("every variable used in the prompt or first message has a default", () => {

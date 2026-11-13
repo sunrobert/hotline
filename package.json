@@ -14,7 +14,9 @@
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm test",
     "setup": "node scripts/setup.ts",
-    "chain": "node --env-file-if-exists=.env.local scripts/chain.ts"
+    "chain": "node --env-file-if-exists=.env.local scripts/chain.ts",
+    "agent": "node --env-file-if-exists=.env.local scripts/agent.ts",
+    "agent:test": "node --env-file-if-exists=.env.local scripts/agent-tests.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.8",
