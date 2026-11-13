@@ -144,3 +144,29 @@ test("the call-start webhook is only switched on when asked, since an unreachabl
   const on = buildAgent({ toolIds: [], llm: "claude-sonnet-5-5", initiationWebhook: true });
   assert.equal(on.platform_settings?.overrides.enable_conversation_initiation_client_data_from_webhook, true);
 });
+
+
+test("English is spoken by Katie, a voice made for phone assistants, on the fast model ElevenLabs requires", () => {
+  const tts = agent().conversation_config.tts;
+  assert.equal(tts.voice_id, "kfGEdprt9Oe4pbdP8VTo");
+  assert.equal(tts.model_id, "eleven_flash_v2");
+});
+
+test("Mandarin switches to a native Mandarin voice on a higher-quality model", () => {
+  const zh = agent().conversation_config.language_presets.zh!.overrides;
+  assert.equal(zh.tts?.voice_id, "bhJUNIXWQQ94l8eI2VUf");
+  assert.equal(zh.tts?.model_id, "eleven_v4_turbo");
+});
+
+test("other languages keep the default voice; only Mandarin has its own", () => {
+  const presets = agent().conversation_config.language_presets;
+  const withVoice = Object.entries(presets).filter(([, p]) => p.overrides.tts).map(([code]) => code);
+  assert.deepEqual(withVoice, ["zh"]);
+});
+
+test("the prompt asks for spoken amounts to be rounded and for natural Mandarin terms", () => {
+  const p = agent().conversation_config.agent.prompt.prompt;
+  assert.match(p, /round/i);
+  assert.match(p, /密码/);
+  assert.match(p, /爱丽丝/);
+});

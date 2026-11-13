@@ -100,6 +100,17 @@ export function buildTools(opts: { baseUrl: string; secretId: string }): Webhook
 export const DEFAULT_CALL_CONTEXT = "The owner called you. You do not yet know why. Call get_status if you need to know whether anything is waiting for approval.";
 export const DEFAULT_OPENING_LINE = "Hotline here. What do you need?";
 
+/**
+ * Voices. One voice reading every language sounds like a foreign accent, so Mandarin gets
+ * its own native speaker. Picked by ear from samples on Nov 13.
+ */
+export const VOICES = {
+  /** Katie: American English, made for phone assistants and customer service. */
+  en: "kfGEdprt9Oe4pbdP8VTo",
+  /** Amy: native Beijing Mandarin, friendly and natural. */
+  zh: "bhJUNIXWQQ94l8eI2VUf",
+} as const;
+
 /** English is the default. These are switched to by language detection, mid-call. */
 export const EXTRA_LANGUAGES = [
   "zh", "es", "hi", "ar", "fr", "pt", "ja", "ko", "de", "it", "ru", "id", "tr", "vi", "nl", "pl",
@@ -156,7 +167,10 @@ If the owner asks whether it went through, call get_action_status. Say it is don
 Sometimes you are the one calling, because money arrived and the owner's standing rule wants to move it. The context above will say so. Open with one sentence saying who you are and why you are calling. State the amount and where it would go. Ask for yes or no and the PIN. Then follow the approval rules. If nobody answers or you reach voicemail, leave no details and end the call.
 
 # Style
-Calm, brief, exact with numbers. Say USDC as the letters U S D C. Do not read out action codes unless asked.`;
+Calm, brief, exact with numbers. Do not read out action codes unless asked.
+- Round amounts when you say them: about 11 USDC, not "ten point nine nine nine five". Use the exact figure only when reading back an amount for approval.
+- In English, say USDC as the letters U S D C.
+- In Mandarin, speak naturally instead of mixing in English: say 密码 for PIN, 爱丽丝 for Alice, 储蓄 for savings, and use measure words (八个 USDC). Write USDC without spaces. Tool parameters stay the same: the label is still alice or savings.`;
 
 const systemTool = (name: "language_detection" | "end_call" | "voicemail_detection") => ({
   type: "system" as const,
@@ -195,12 +209,19 @@ export function buildAgent(opts: { toolIds: string[]; llm: string; name?: string
           },
         },
       },
-      tts: { model_id: "eleven_flash_v2" },
+      // ElevenLabs requires flash or turbo v2 for an English-default agent.
+      tts: { model_id: "eleven_flash_v2", voice_id: VOICES.en },
       turn: { turn_timeout: 7, silence_end_call_timeout: 30 },
       conversation: { max_duration_seconds: 300 },
       language_presets: Object.fromEntries(
-        EXTRA_LANGUAGES.map((code) => [code, { overrides: { agent: { first_message: "{{opening_line}}" } } }]),
-      ) as Record<string, { overrides: { agent: { first_message: string } } }>,
+        EXTRA_LANGUAGES.map((code) => [code, {
+          overrides: {
+            agent: { first_message: "{{opening_line}}" },
+            // Mandarin: native voice on the v4 turbo model, which sounded most natural in samples.
+            ...(code === "zh" ? { tts: { voice_id: VOICES.zh, model_id: "eleven_v4_turbo" } } : {}),
+          },
+        }]),
+      ) as Record<string, { overrides: { agent: { first_message: string }; tts?: { voice_id: string; model_id: string } } }>,
     },
   };
 }

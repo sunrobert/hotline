@@ -72,6 +72,7 @@ The agent runs on **ElevenLabs Agents**. Its whole definition is code in [`src/a
 - **The shared secret never enters the prompt.** It is stored in ElevenLabs' secret store and referenced by id from each tool's header.
 - **Languages.** English by default, with ElevenLabs language detection switching mid-call to any of 31 other languages. The backend is language-neutral: tools receive numbers, labels, and digits.
 - **Built-in system tools:** language detection, end call, and voicemail detection, so an approval is never left on an answering machine.
+- **Voices:** Katie, an American English voice made for phone assistants, for English. Amy, a native Beijing Mandarin speaker on ElevenLabs' v4 turbo model, takes over when the caller switches to Mandarin. One voice reading every language sounded like a foreign accent, so Mandarin gets its own.
 - **Model:** Claude Sonnet 5.5, temperature 0.
 - **Call start.** [`/hooks/conversation-init`](src/server.ts) tells the agent whether the caller is the owner and whether an approval is waiting, and binds that approval to the call.
 
