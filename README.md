@@ -8,7 +8,7 @@ Hotline is an onchain agent you reach by phone. It holds USDC on Arc and acts wi
 
 The phone call is the guardrail.
 
-> **Status: in progress.** The decision loop, policy engine, ledger, tool API, Arc wallet, and the voice agent's definition are built and tested. The agent exists on ElevenLabs and passes its behaviour tests in text. The outbound call queue and the onchain deposit watcher are built and unit-tested. It is not on a phone number yet, so no real call has been placed. Attaching the number, a QuickNode Stream as the primary trigger, the dashboard, and the iMessage channel are next. This README is updated as each piece lands. Planning docs: [UBC-Hackathon-2026](https://github.com/sunrobert/UBC-Hackathon-2026).
+> **Status: in progress.** The decision loop, policy engine, ledger, tool API, Arc wallet, and the voice agent's definition are built and tested. The agent exists on ElevenLabs and passes its behaviour tests in text. The outbound call queue and the onchain deposit watcher are built and unit-tested. The dashboard is built, and you can start a voice session with the agent from it in the browser. It is not on a phone number yet, so no phone call has been placed, and no full voice conversation has been run end to end: the agent's tools need the backend to be reachable from the internet first. Attaching a number, a QuickNode Stream as the primary trigger, and the iMessage channel are next. This README is updated as each piece lands. Planning docs: [UBC-Hackathon-2026](https://github.com/sunrobert/UBC-Hackathon-2026).
 
 ## The decision loop
 
@@ -99,6 +99,28 @@ The agent runs on **ElevenLabs Agents**. Its whole definition is code in [`src/a
 2. *Verified by text tests:* the ten languages above.
 3. *Supported by the platform, not verified here:* the other 22.
 
+## Dashboard
+
+`http://localhost:8787/dashboard` once the server is running. Sign in with `DASHBOARD_TOKEN` from `.env.local`; the page keeps it in the tab's session storage and sends it in an `Authorization` header, never in a URL.
+
+- **Balance, limits, recipients** (labels and spoken aliases; recipient addresses are never sent to the page).
+- **Ledger**, refreshed every two seconds: every decision, the rule that fired, where it stands, and an explorer link.
+- **Waiting for your approval.** Shown, but not approvable here. Approvals are by voice with the PIN.
+- **Unpause.** The only place it can be done.
+- **Call Hotline.** Starts a voice session with the agent in the browser, with no phone number. The server fetches a short-lived conversation token from ElevenLabs, so the API key never reaches the page.
+- **Simulate deposit** (development only, off when `NODE_ENV=production`). Runs the deposit rule without a chain transfer. It does not credit the wallet, so the sweep rule still works from the real balance.
+
+**How a browser call is authorised.** A browser session has no caller number, so the phone-number gate cannot apply. Instead the page, holding the dashboard token, tells the server which conversation it started (`/api/call/bind`). Only that conversation's tool calls are let through. The PIN is still required for anything over the threshold.
+
+| Endpoint (all need `Authorization: Bearer <DASHBOARD_TOKEN>`) | Does |
+|---|---|
+| `GET /api/state` | Balance, pause flag, rules, pending actions, ledger |
+| `POST /api/unpause` | Unpauses the agent |
+| `POST /api/call/start` | Conversation token plus what the agent should know going in |
+| `POST /api/call/bind` | Authorises that conversation and ties a waiting sweep to it |
+| `POST /api/call/end` | Releases a waiting sweep so the next call can pick it up |
+| `POST /api/simulate-deposit` | Development only |
+
 ## When money arrives
 
 ```
@@ -143,6 +165,8 @@ Explorer: https://explorer.testnet.arc.io
 | `src/calls/queue.ts` | Outbound approval calls: one at a time, two attempts ninety seconds apart, amount recomputed at dial time. |
 | `src/calls/elevenlabs.ts` | Places calls through ElevenLabs' Twilio integration and watches for them to end. |
 | `src/deposits/watcher.ts` | Reads Arc's USDC Transfer logs and turns transfers to the agent into deposits. |
+| `src/dashboard/page.html` | The dashboard: one static page, no build step, no secrets. |
+| `src/dashboard/token.ts` | Gets the short-lived token for a browser voice session. |
 | `scripts/agent.ts` | Pushes the agent definition to ElevenLabs. Idempotent. |
 | `scripts/agent-tests.ts` | Behaviour tests against the live agent. |
 | `src/wallet/arc.ts` | Arc testnet wallet through viem. |
@@ -158,7 +182,7 @@ npm install
 npm run setup      # writes .env.local with fresh TESTNET keys, a PIN, and secrets
 npm run chain      # read-only check of Arc testnet and the demo wallets
 npm run check      # typecheck + tests
-npm start          # after setting OWNER_NUMBERS in .env.local
+npm start          # after setting OWNER_NUMBERS in .env.local; then open http://localhost:8787/dashboard
 npm run agent      # create or update the voice agent (needs ELEVENLABS_API_KEY, PUBLIC_URL)
 npm run agent:test # behaviour tests against the live agent
 npm run phone      # attach your Twilio number to the agent (needs the three TWILIO_ values)
