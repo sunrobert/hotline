@@ -168,3 +168,48 @@ test("there is no tool for changing rules by voice", async () => {
   const { call, inbound } = harness();
   assert.equal((await call("set_rule", inbound({ per_tx_cap_usdc: 99999 }))).status, 404);
 });
+
+// ---------- conversation-initiation hook ----------
+
+const initHook = async (h: ReturnType<typeof harness>, body: Record<string, unknown>, secret: string | null = SECRET) => {
+  const res = await h.app.request("/hooks/conversation-init", {
+    method: "POST", headers: { "content-type": "application/json", ...(secret ? { "x-hotline-secret": secret } : {}) }, body: JSON.stringify(body),
+  });
+  return { status: res.status, json: (await res.json()) as Record<string, any> };
+};
+
+test("the call-start hook needs the shared secret", async () => {
+  const h = harness();
+  assert.equal((await initHook(h, { caller_id: OWNER, conversation_id: "in-1" }, null)).status, 401);
+});
+
+test("the call-start hook returns every variable the agent's prompt uses", async () => {
+  const h = harness();
+  const r = await initHook(h, { caller_id: OWNER, called_number: AGENT, conversation_id: "in-1" });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.type, "conversation_initiation_client_data");
+  assert.match(r.json.dynamic_variables.call_context, /owner called/i);
+  assert.ok(r.json.dynamic_variables.opening_line);
+});
+
+test("the call-start hook tells the agent about a waiting sweep and binds it to the call", async () => {
+  const h = harness();
+  h.wallet.balanceMicros = 60 * U;
+  await h.deposit(200 * U);
+  const code = h.ledger.pendingSweep()!.code;
+  const r = await initHook(h, { caller_id: OWNER, called_number: AGENT, conversation_id: "in-5" });
+  assert.match(r.json.dynamic_variables.call_context, /159 USDC/);
+  assert.match(r.json.dynamic_variables.call_context, /savings/);
+  assert.equal(h.ledger.get(code)?.conversation_id, "in-5");
+});
+
+test("the call-start hook tells the agent to refuse a caller who is not the owner, and binds nothing", async () => {
+  const h = harness();
+  h.wallet.balanceMicros = 60 * U;
+  await h.deposit(200 * U);
+  const r = await initHook(h, { caller_id: "+19995550000", called_number: AGENT, conversation_id: "in-6" });
+  assert.equal(r.status, 200);
+  assert.match(r.json.dynamic_variables.call_context, /not the owner/i);
+  assert.doesNotMatch(r.json.dynamic_variables.call_context, /159/);
+  assert.equal(h.ledger.pendingSweep()?.conversation_id, null);
+});

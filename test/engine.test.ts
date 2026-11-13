@@ -416,3 +416,26 @@ test("on boot, submitted actions are re-checked, interrupted ones fail closed, s
   assert.equal(ledger.get(live.code)?.call_live, 0);
   assert.equal(wallet.sends.length, 0); // recovery never re-sends anything
 });
+
+// ---------- inbound calls picking up a waiting sweep ----------
+
+test("an inbound call picks up a waiting sweep, so a yes on that call executes it", async () => {
+  const { deposit, engine, wallet, ledger } = setup({ balance: 60 * U });
+  await deposit(200 * U);
+  const code = ledger.pendingSweep()!.code;
+  const offered = await engine.offerPendingTo("in-7");
+  assert.equal(offered?.action_code, code);
+  assert.equal(offered?.amount_usdc, 159);
+  const r = await engine.confirm({ conversationId: "in-7", approved: true, pin: PIN });
+  assert.equal(r.ok, true);
+  assert.deepEqual(wallet.sends.map((s) => [s.to, s.amount]), [[SAVINGS, 159 * U]]);
+});
+
+test("an inbound call is offered nothing when no sweep is waiting or one is already on a live call", async () => {
+  const { deposit, engine, ledger } = setup({ balance: 60 * U });
+  assert.equal(await engine.offerPendingTo("in-1"), null);
+  await deposit(200 * U);
+  await engine.present(ledger.pendingSweep()!.code, "out-1");
+  assert.equal(await engine.offerPendingTo("in-2"), null);
+  assert.equal(ledger.pendingSweep()?.conversation_id, "out-1");
+});

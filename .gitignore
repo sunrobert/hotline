@@ -6,3 +6,4 @@ node_modules/
 *.db-*
 data/
 .DS_Store
+.gstack/

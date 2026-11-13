@@ -242,6 +242,17 @@ export class Engine {
     return this.#ledger.update(code, { amount, conversation_id: conversationId, bound_at: now, call_live: 1 }, now);
   }
 
+  /**
+   * The owner called in while a sweep was waiting. Tie it to this call so a yes here can
+   * approve it. Returns null if nothing is waiting or the owner is already being asked elsewhere.
+   */
+  async offerPendingTo(conversationId: string): Promise<ActionView | null> {
+    const waiting = this.#ledger.pendingSweep();
+    if (!waiting || waiting.call_live) return null;
+    const presented = await this.present(waiting.code, conversationId);
+    return presented ? view(presented) : null;
+  }
+
   callEnded(conversationId: string): void {
     const row = this.#ledger.boundTo(conversationId);
     if (row?.call_live) this.#ledger.update(row.code, { call_live: 0 }, this.#now());

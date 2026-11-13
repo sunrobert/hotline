@@ -10,6 +10,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { Engine } from "./engine.ts";
 import type { ServerConfig } from "./config.ts";
 import { normalizeE164 } from "./phone.ts";
+import { DEFAULT_OPENING_LINE } from "./agent/definition.ts";
 
 export interface AppDeps {
   engine: Engine;
@@ -90,6 +91,29 @@ export function createApp({ engine, cfg, isOutbound = () => false }: AppDeps): H
       return c.json({ paused: true, message: "Paused. Nothing moves until it is unpaused from the dashboard." });
     },
   };
+
+  /**
+   * ElevenLabs calls this as an inbound call connects. The answer fills the variables in
+   * the agent's prompt. A waiting sweep is bound to the call here, deterministically,
+   * instead of hoping the model remembers to ask.
+   */
+  app.post("/hooks/conversation-init", async (c) => {
+    if (!secretMatches(c.req.header("x-hotline-secret"), cfg.secret)) return c.json({ error: "unauthorized" }, 401);
+    const body = (await c.req.json().catch(() => ({}))) as Body;
+    const conversationId = readString(body.conversation_id);
+    const variables = { call_context: "", opening_line: DEFAULT_OPENING_LINE };
+
+    if (!conversationId || !isOwnerConversation(body, conversationId)) {
+      variables.call_context = "This caller is NOT the owner. Do not use any tools. Say you cannot help with this number and end the call.";
+      variables.opening_line = "Hotline.";
+    } else {
+      const waiting = await engine.offerPendingTo(conversationId);
+      variables.call_context = waiting
+        ? `The owner called you. One action is waiting for their approval on this call: ${waiting.summary}, because money arrived and their standing rule moves the excess to savings. Tell them about it first and ask for a yes or no and the PIN.`
+        : "The owner called you. Nothing is waiting for approval.";
+    }
+    return c.json({ type: "conversation_initiation_client_data", dynamic_variables: variables });
+  });
 
   app.post("/tools/:tool", async (c) => {
     if (!secretMatches(c.req.header("x-hotline-secret"), cfg.secret)) {
