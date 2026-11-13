@@ -1,0 +1,24 @@
+{
+  "name": "hotline",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A voice agent on Arc that calls you before it spends. UBC 2026 Hackathon.",
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env.local --watch src/index.ts",
+    "start": "node --env-file-if-exists=.env.local src/index.ts",
+    "test": "node --test --disable-warning=ExperimentalWarning \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "hono": "^4.6.14",
+    "viem": "^2.21.55"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0"
+  }
+}
