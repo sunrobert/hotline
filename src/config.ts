@@ -24,7 +24,7 @@ export interface Config {
   /** The number the agent dials for approvals: the first of OWNER_NUMBERS. */
   ownerNumber: string;
   /** Null until the agent exists and a phone number is attached. Calls are skipped without it. */
-  voice: { apiKey: string; agentId: string; phoneNumberId: string } | null;
+  voice: { apiKey: string; agentId: string; phoneNumberId: string; provider: "twilio" | "sip_trunk" } | null;
 }
 
 type Env = Record<string, string | undefined>;
@@ -64,7 +64,9 @@ function voice(env: Env): Config["voice"] {
   const apiKey = env.ELEVENLABS_API_KEY?.trim();
   const agentId = env.ELEVENLABS_AGENT_ID?.trim();
   const phoneNumberId = env.ELEVENLABS_PHONE_NUMBER_ID?.trim();
-  return apiKey && agentId && phoneNumberId ? { apiKey, agentId, phoneNumberId } : null;
+  const provider = env.ELEVENLABS_PHONE_PROVIDER?.trim() || "twilio";
+  if (provider !== "twilio" && provider !== "sip_trunk") throw new Error(`ELEVENLABS_PHONE_PROVIDER must be twilio or sip_trunk, got "${provider}"`);
+  return apiKey && agentId && phoneNumberId ? { apiKey, agentId, phoneNumberId, provider } : null;
 }
 
 export function loadConfig(env: Env): Config {

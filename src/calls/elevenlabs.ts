@@ -1,4 +1,4 @@
-// Places and tracks outbound calls through ElevenLabs' Twilio integration.
+// Places and tracks outbound calls through ElevenLabs, over a Twilio number or a SIP trunk (for example Telnyx).
 
 import type { Dialer } from "./queue.ts";
 
@@ -6,13 +6,17 @@ const API = "https://api.elevenlabs.io";
 /** `processing` means the call is over and ElevenLabs is analysing it. */
 const ENDED = new Set(["processing", "done", "failed"]);
 
-export function createDialer(opts: { apiKey: string; agentId: string; phoneNumberId: string; fetch?: typeof fetch }): Dialer {
+export type PhoneProvider = "twilio" | "sip_trunk";
+
+export function createDialer(opts: { apiKey: string; agentId: string; phoneNumberId: string; provider?: PhoneProvider; fetch?: typeof fetch }): Dialer {
   const doFetch = opts.fetch ?? fetch;
   const headers = { "xi-api-key": opts.apiKey, "content-type": "application/json" };
+  // Same request either way; the number's provider decides which endpoint places the call.
+  const outboundPath = opts.provider === "sip_trunk" ? "/v1/convai/sip-trunk/outbound-call" : "/v1/convai/twilio/outbound-call";
 
   return {
     async dial({ toNumber, variables }) {
-      const res = await doFetch(`${API}/v1/convai/twilio/outbound-call`, {
+      const res = await doFetch(`${API}${outboundPath}`, {
         method: "POST", headers,
         body: JSON.stringify({
           agent_id: opts.agentId,

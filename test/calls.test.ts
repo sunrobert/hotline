@@ -231,3 +231,13 @@ test("a conversation counts as ended once its status is done or failed", async (
     [false, false, true, true, true, false],
   );
 });
+
+test("a SIP trunk number is dialled through the SIP outbound endpoint with the same body", async () => {
+  const { impl, requests } = fakeFetch([{ status: 200, body: { success: true, message: "ok", conversation_id: "conv_7", sip_call_id: "abc" } }]);
+  const d = createDialer({ apiKey: "key-for-tests", agentId: "agent_1", phoneNumberId: "phnum_1", provider: "sip_trunk", fetch: impl });
+  const r = await d.dial({ toNumber: OWNER, variables: { call_context: "ctx", opening_line: "hi" } });
+  assert.equal(r.conversationId, "conv_7");
+  assert.equal(requests[0]?.url, "https://api.elevenlabs.io/v1/convai/sip-trunk/outbound-call");
+  assert.equal(requests[0]?.body.agent_phone_number_id, "phnum_1");
+  assert.equal(requests[0]?.body.to_number, OWNER);
+});

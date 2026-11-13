@@ -76,10 +76,17 @@ test("voice calling is off unless the ElevenLabs key, agent id, and phone number
   assert.equal(loadConfig(env({ ELEVENLABS_API_KEY: "k", ELEVENLABS_AGENT_ID: "agent_1" })).voice, null);
   assert.deepEqual(
     loadConfig(env({ ELEVENLABS_API_KEY: "k", ELEVENLABS_AGENT_ID: "agent_1", ELEVENLABS_PHONE_NUMBER_ID: "phnum_1" })).voice,
-    { apiKey: "k", agentId: "agent_1", phoneNumberId: "phnum_1" },
+    { apiKey: "k", agentId: "agent_1", phoneNumberId: "phnum_1", provider: "twilio" },
   );
 });
 
 test("the first owner number is the one the agent calls", () => {
   assert.equal(loadConfig(env()).ownerNumber, "+15125550147");
+});
+
+test("the phone provider defaults to twilio and can be set to sip_trunk, and nothing else", () => {
+  const base = { ELEVENLABS_API_KEY: "k", ELEVENLABS_AGENT_ID: "agent_1", ELEVENLABS_PHONE_NUMBER_ID: "phnum_1" };
+  assert.equal(loadConfig(env(base)).voice?.provider, "twilio");
+  assert.equal(loadConfig(env({ ...base, ELEVENLABS_PHONE_PROVIDER: "sip_trunk" })).voice?.provider, "sip_trunk");
+  assert.throws(() => loadConfig(env({ ...base, ELEVENLABS_PHONE_PROVIDER: "carrier-pigeon" })), /ELEVENLABS_PHONE_PROVIDER/);
 });
