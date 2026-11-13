@@ -439,3 +439,45 @@ test("an inbound call is offered nothing when no sweep is waiting or one is alre
   assert.equal(await engine.offerPendingTo("in-2"), null);
   assert.equal(ledger.pendingSweep()?.conversation_id, "out-1");
 });
+
+// ---------- preparing and binding an outbound call ----------
+
+test("prepareCall recomputes a sweep without binding it to any conversation", async () => {
+  const { deposit, engine, wallet, ledger } = setup({ balance: 60 * U });
+  await deposit(200 * U);
+  const code = ledger.pendingSweep()!.code;
+  wallet.balanceMicros = 200 * U;
+  const row = await engine.prepareCall(code);
+  assert.equal(row?.amount, 99 * U);
+  assert.equal(row?.conversation_id, null);
+  assert.equal(row?.call_live, 0);
+});
+
+test("prepareCall returns null for an action that is not waiting, and cancels a sweep that is no longer needed", async () => {
+  const { deposit, engine, wallet, ledger } = setup({ balance: 60 * U });
+  assert.equal(await engine.prepareCall("H-NOPE"), null);
+  await deposit(200 * U);
+  const code = ledger.pendingSweep()!.code;
+  wallet.balanceMicros = 90 * U;
+  assert.equal(await engine.prepareCall(code), null);
+  assert.equal(ledger.get(code)?.reason, "no_longer_needed");
+});
+
+test("bindCall ties the action to the conversation and marks it live without touching the amount", async () => {
+  const { deposit, engine, wallet, ledger } = setup({ balance: 60 * U });
+  await deposit(200 * U);
+  const code = ledger.pendingSweep()!.code;
+  wallet.balanceMicros = 500 * U; // would recompute to a larger amount; binding must not
+  engine.bindCall(code, "out-3");
+  const row = ledger.get(code)!;
+  assert.equal(row.amount, 159 * U);
+  assert.equal(row.conversation_id, "out-3");
+  assert.equal(row.call_live, 1);
+});
+
+test("statusOf reports an action's lifecycle status by code", async () => {
+  const { engine } = setup();
+  const r = await engine.propose({ kind: "send", toLabel: "alice", amountUsdc: 80, source: "voice", conversationId: "c1" });
+  assert.equal(engine.statusOf(r.action_code), "pending");
+  assert.equal(engine.statusOf("H-NOPE"), undefined);
+});

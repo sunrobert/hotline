@@ -225,21 +225,37 @@ export class Engine {
   // ---------- calls ----------
 
   /**
-   * Dial time. Recomputes a sweep against the current balance, ties the action to the
-   * outbound conversation, and marks the call live. Returns null if there is no longer
-   * anything to ask.
+   * Dial time, step one. Recomputes a sweep against the current balance so the amount the
+   * agent reads out is current. Returns null, cancelling if need be, when there is no
+   * longer anything to ask.
    */
-  async present(code: string, conversationId: string): Promise<ActionRow | null> {
+  async prepareCall(code: string): Promise<ActionRow | null> {
     const row = this.#ledger.get(code);
     if (!row || row.status !== "pending") return null;
-    let amount = row.amount;
-    if (row.origin === "sweep") {
-      const fresh = await this.#sweepAmount(code);
-      if (fresh === null) { this.#cancel(code, "no_longer_needed"); return null; }
-      amount = fresh;
-    }
+    if (row.origin !== "sweep") return row;
+    const fresh = await this.#sweepAmount(code);
+    if (fresh === null) { this.#cancel(code, "no_longer_needed"); return null; }
+    return fresh === row.amount ? row : this.#ledger.update(code, { amount: fresh }, this.#now());
+  }
+
+  /**
+   * Dial time, step two. Ties the action to the conversation and marks the call live.
+   * Never changes the amount: what was read out is what a yes approves.
+   */
+  bindCall(code: string, conversationId: string): void {
     const now = this.#now();
-    return this.#ledger.update(code, { amount, conversation_id: conversationId, bound_at: now, call_live: 1 }, now);
+    this.#ledger.update(code, { conversation_id: conversationId, bound_at: now, call_live: 1 }, now);
+  }
+
+  /** Both steps at once, for a call that already exists (the owner called in). */
+  async present(code: string, conversationId: string): Promise<ActionRow | null> {
+    if (!(await this.prepareCall(code))) return null;
+    this.bindCall(code, conversationId);
+    return this.#ledger.get(code) ?? null;
+  }
+
+  statusOf(code: string): string | undefined {
+    return this.#ledger.get(code)?.status;
   }
 
   /**
