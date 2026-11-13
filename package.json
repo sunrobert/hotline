@@ -16,7 +16,9 @@
     "setup": "node scripts/setup.ts",
     "chain": "node --env-file-if-exists=.env.local scripts/chain.ts",
     "agent": "node --env-file-if-exists=.env.local scripts/agent.ts",
-    "agent:test": "node --env-file-if-exists=.env.local scripts/agent-tests.ts"
+    "agent:test": "node --env-file-if-exists=.env.local scripts/agent-tests.ts",
+    "phone": "node --env-file-if-exists=.env.local scripts/phone.ts",
+    "demo:deposit": "node --env-file-if-exists=.env.local scripts/deposit.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.8",

@@ -137,3 +137,10 @@ test("calls cannot run away: silence ends the call and there is a hard time limi
   assert.ok(cfg.turn.silence_end_call_timeout > 0 && cfg.turn.silence_end_call_timeout <= 60);
   assert.ok(cfg.conversation.max_duration_seconds <= 600);
 });
+
+test("the call-start webhook is only switched on when asked, since an unreachable hook breaks inbound calls", () => {
+  const off = buildAgent({ toolIds: [], llm: "claude-sonnet-5-5" }) as { platform_settings?: unknown };
+  assert.equal(off.platform_settings, undefined);
+  const on = buildAgent({ toolIds: [], llm: "claude-sonnet-5-5", initiationWebhook: true });
+  assert.equal(on.platform_settings?.overrides.enable_conversation_initiation_client_data_from_webhook, true);
+});

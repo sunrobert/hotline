@@ -58,7 +58,18 @@ for (const tool of buildTools({ baseUrl, secretId })) {
 }
 
 // 3. The agent.
-const definition = buildAgent({ toolIds, llm, name: agentName });
+// Inbound calls ask the backend who is calling. Only wire that up once the backend has a real address.
+const deployed = !baseUrl.endsWith(".invalid");
+if (deployed) {
+  await call("PATCH", "/v1/convai/settings", {
+    conversation_initiation_client_data_webhook: {
+      url: `${baseUrl.replace(/\/+$/, "")}/hooks/conversation-init`,
+      request_headers: { "X-Hotline-Secret": { secret_id: secretId } },
+    },
+  });
+  console.log("webhook  call-start hook set");
+}
+const definition = buildAgent({ toolIds, llm, name: agentName, initiationWebhook: deployed });
 const { agents } = await call<{ agents: { agent_id: string; name: string }[] }>("GET", `/v1/convai/agents?search=${encodeURIComponent(agentName)}`);
 let agentId = agents.find((a) => a.name === agentName)?.agent_id;
 if (agentId) {

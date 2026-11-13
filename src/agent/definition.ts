@@ -165,8 +165,12 @@ const systemTool = (name: "language_detection" | "end_call" | "voicemail_detecti
   params: { system_tool_type: name },
 });
 
-export function buildAgent(opts: { toolIds: string[]; llm: string; name?: string }) {
+export function buildAgent(opts: { toolIds: string[]; llm: string; name?: string; initiationWebhook?: boolean }) {
   return {
+    // Ask the backend who is calling as each inbound call connects. Only on once the backend is reachable.
+    ...(opts.initiationWebhook
+      ? { platform_settings: { overrides: { enable_conversation_initiation_client_data_from_webhook: true } } }
+      : {}),
     name: opts.name ?? "Hotline",
     tags: ["hotline", "ubc-2026"],
     conversation_config: {

@@ -70,3 +70,16 @@ test("loadConfig rejects limits that contradict each other", () => {
 test("loadConfig rejects an owner number it cannot parse", () => {
   assert.throws(() => loadConfig(env({ OWNER_NUMBERS: "call me maybe" })), /OWNER_NUMBERS/);
 });
+
+test("voice calling is off unless the ElevenLabs key, agent id, and phone number id are all set", () => {
+  assert.equal(loadConfig(env()).voice, null);
+  assert.equal(loadConfig(env({ ELEVENLABS_API_KEY: "k", ELEVENLABS_AGENT_ID: "agent_1" })).voice, null);
+  assert.deepEqual(
+    loadConfig(env({ ELEVENLABS_API_KEY: "k", ELEVENLABS_AGENT_ID: "agent_1", ELEVENLABS_PHONE_NUMBER_ID: "phnum_1" })).voice,
+    { apiKey: "k", agentId: "agent_1", phoneNumberId: "phnum_1" },
+  );
+});
+
+test("the first owner number is the one the agent calls", () => {
+  assert.equal(loadConfig(env()).ownerNumber, "+15125550147");
+});

@@ -21,6 +21,10 @@ export interface Config {
   dbPath: string;
   port: number;
   ownerLanguage: string;
+  /** The number the agent dials for approvals: the first of OWNER_NUMBERS. */
+  ownerNumber: string;
+  /** Null until the agent exists and a phone number is attached. Calls are skipped without it. */
+  voice: { apiKey: string; agentId: string; phoneNumberId: string } | null;
 }
 
 type Env = Record<string, string | undefined>;
@@ -54,6 +58,13 @@ function pairs(raw: string, key: string): [string, string][] {
     if (i <= 0 || i === entry.length - 1) throw new Error(`${key}: "${entry}" is not label:value`);
     return [normalizeLabel(entry.slice(0, i)), entry.slice(i + 1).trim()];
   });
+}
+
+function voice(env: Env): Config["voice"] {
+  const apiKey = env.ELEVENLABS_API_KEY?.trim();
+  const agentId = env.ELEVENLABS_AGENT_ID?.trim();
+  const phoneNumberId = env.ELEVENLABS_PHONE_NUMBER_ID?.trim();
+  return apiKey && agentId && phoneNumberId ? { apiKey, agentId, phoneNumberId } : null;
 }
 
 export function loadConfig(env: Env): Config {
@@ -113,5 +124,7 @@ export function loadConfig(env: Env): Config {
     dbPath: env.DB_PATH?.trim() || "data/hotline.db",
     port: integer(env, "PORT", 8787, 1, 65_535),
     ownerLanguage: env.OWNER_LANGUAGE?.trim() || "en",
+    ownerNumber: ownerNumbers[0]!,
+    voice: voice(env),
   };
 }
