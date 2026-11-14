@@ -13,11 +13,9 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { Resolver } from "node:dns/promises";
-import { get } from "node:https";
-import type { LookupFunction } from "node:net";
 import { readFileSync, writeFileSync } from "node:fs";
 import { findTunnelUrl, setEnvValue, watchStep } from "./tunnel-lib.ts";
+import { publicHealthy } from "./net.ts";
 import type { WatchState } from "./tunnel-lib.ts";
 
 const port = Number(process.env.PORT || 8787);
@@ -94,25 +92,6 @@ async function ready(publicUrl: string, myGeneration: number) {
 
 async function localHealthy(): Promise<boolean> {
   try { return (await fetch(`http://localhost:${port}/health`, { signal: AbortSignal.timeout(5000) })).ok; } catch { return false; }
-}
-
-async function publicHealthy(publicUrl: string): Promise<boolean> {
-  const host = new URL(publicUrl).hostname;
-  const resolver = new Resolver();
-  resolver.setServers(["1.1.1.1", "1.0.0.1"]);
-  let ip: string | undefined;
-  try { ip = (await resolver.resolve4(host))[0]; } catch { return false; }
-  if (!ip) return false;
-  const address = ip;
-  return new Promise((resolve) => {
-    const req = get(`${publicUrl}/health`, {
-      timeout: 8000,
-      lookup: ((_host, opts, cb) =>
-        opts.all ? cb(null, [{ address, family: 4 }]) : cb(null, address, 4)) as LookupFunction,
-    }, (res) => { res.resume(); resolve(res.statusCode === 200); });
-    req.on("timeout", () => { req.destroy(); resolve(false); });
-    req.on("error", () => resolve(false));
-  });
 }
 
 setInterval(async () => {

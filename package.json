@@ -21,7 +21,8 @@
     "demo:deposit": "node --env-file-if-exists=.env.local scripts/deposit.ts",
     "tunnel": "node scripts/tunnel.ts",
     "reset-demo": "node --env-file-if-exists=.env.local scripts/reset-demo.ts",
-    "stream": "node --env-file-if-exists=.env.local scripts/stream.ts"
+    "stream": "node --env-file-if-exists=.env.local scripts/stream.ts",
+    "preflight": "node --env-file-if-exists=.env.local scripts/preflight.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.8",

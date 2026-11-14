@@ -235,6 +235,7 @@ npm run phone      # attach your Twilio number to the agent (needs the three TWI
 npm run demo:deposit -- 20    # send testnet USDC from the sender wallet to the agent
 npm run tunnel     # in a second terminal: free public HTTPS address for this laptop; repoints the agent
 npm run reset-demo # before each rehearsal: money back from savings and alice, agent topped to 15 (add --dry-run to preview)
+npm run preflight  # before a rehearsal, recording, or the finals: checks everything and prints the fix for anything not ready
 ```
 
 Fund the `sender` and `agent` addresses with testnet USDC at https://faucet.circle.com (network: Arc Testnet). The faucet gives about 40 USDC per address, so the demo limits are small: 5 USDC auto-approve, 50 per transaction, 200 a day, and anything over 10 swept to savings.
