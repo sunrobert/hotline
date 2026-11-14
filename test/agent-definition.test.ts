@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildTools, buildAgent, TOOL_SECRET_NAME } from "../src/agent/definition.ts";
+import { buildTools, buildAgent, TOOL_SECRET_NAME, SYSTEM_PROMPT } from "../src/agent/definition.ts";
 import { createApp } from "../src/server.ts";
 import { setup } from "./helpers.ts";
 
@@ -18,7 +18,7 @@ test("every tool the agent is given exists on the server, and nothing else is of
   const { engine } = setup();
   const app = createApp({ engine, cfg: { secret: "s", ownerNumbers: ["+15125550147"], dashboardToken: "d" } });
   const names = tools().map((t) => t.name).sort();
-  assert.deepEqual(names, ["confirm_action", "get_action_status", "get_rules", "get_status", "pause", "propose_action"]);
+  assert.deepEqual(names, ["confirm_action", "get_action_status", "get_price", "get_rules", "get_status", "pause", "propose_action"]);
   for (const tool of tools()) {
     const url = new URL(tool.api_schema.url);
     const res = await app.request(url.pathname, {
@@ -183,4 +183,12 @@ test("no word that can mean yes or no is ignored, so an answer spoken over the a
   for (const answer of ["yes", "no", "ok", "okay", "yeah", "yep", "sure", "right", "stop", "wait", "好", "好的", "对", "是", "是的", "可以", "确认", "不", "不要", "等一下"]) {
     assert.ok(!terms.includes(answer), `"${answer}" must still interrupt`);
   }
+});
+
+test("get_price takes one asset and the prompt says it costs money and when to use it", () => {
+  const tool = tools().find((t) => t.name === "get_price");
+  assert.ok(tool);
+  assert.ok(tool.api_schema.request_body_schema.required.includes("asset"));
+  assert.match(SYSTEM_PROMPT, /get_price/);
+  assert.match(SYSTEM_PROMPT, /x402/);
 });

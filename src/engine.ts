@@ -120,7 +120,9 @@ function pinMatches(given: string, expected: string): boolean {
 function view(row: ActionRow): ActionView {
   const what = row.kind === "deposit"
     ? `Deposit of ${formatUsdc(row.amount)} USDC`
-    : `Send ${formatUsdc(row.amount)} USDC to ${row.to_label ?? "?"}`;
+    : row.kind === "pay_api"
+      ? `Paid ${formatUsdc(row.amount)} USDC to ${row.to_label ?? "?"} (x402)`
+      : `Send ${formatUsdc(row.amount)} USDC to ${row.to_label ?? "?"}`;
   return {
     action_code: row.code, kind: row.kind, to_label: row.to_label, amount_usdc: fromMicros(row.amount),
     decision: row.decision, rule: row.rule, status: row.status, reason: row.reason, summary: what, tx_hash: row.tx_hash,
@@ -182,6 +184,47 @@ export class Engine {
     const row = this.#ledger.insert({ ...draft, status: "approved" });
     const after = await this.#execute(row.code);
     return { ...view(after), message: after.status === "failed" ? `It did not go through: ${after.error}` : "Sending now." };
+  }
+
+  /**
+   * An x402 seller wants paying. Same policy as a spoken send: the payee must be on the
+   * allowlist (matched by address) and the price must fit every cap. Paid lookups never
+   * ring the owner, so anything that would need a call is refused instead.
+   * On ok, the row is `approved` (committed) and the caller signs; then reports back
+   * with paymentSubmitted or paymentFailed.
+   */
+  async authorizePayment(req: { payTo: string; amountMicros: number; resource?: string; callerId?: string; conversationId?: string }):
+    Promise<{ ok: true; code: string } | { ok: false; view: ActionView; message: string }> {
+    const now = this.#now();
+    const label = Object.entries(this.#cfg.allowlist).find(([, addr]) => addr.toLowerCase() === req.payTo.toLowerCase())?.[0] ?? req.payTo;
+    const result = decide({ amount: req.amountMicros, toLabel: label, source: "agent" }, await this.#policyState(), this.#cfg);
+    const draft: NewAction = {
+      now, source: "agent", origin: "request", kind: "pay_api",
+      to_label: label, to_addr: this.#cfg.allowlist[label] ?? null, amount: req.amountMicros,
+      decision: result.decision, rule: result.rule, status: "blocked",
+      caller_id: req.callerId ?? null, conversation_id: req.conversationId ?? null, bound_at: null,
+    };
+    if (result.decision === "BLOCK") {
+      const row = this.#ledger.insert({ ...draft, reason: result.rule });
+      return { ok: false, view: view(row), message: result.reason };
+    }
+    if (result.decision === "CALL") {
+      const row = this.#ledger.insert({ ...draft, status: "cancelled", reason: "needs_approval" });
+      return { ok: false, view: view(row), message: `${formatUsdc(req.amountMicros)} USDC is more than a paid lookup can spend without asking, so it was not paid.` };
+    }
+    return { ok: true, code: this.#ledger.insert({ ...draft, status: "approved" }).code };
+  }
+
+  /** The seller settled the authorization on chain. Confirms the receipt in the background. */
+  paymentSubmitted(code: string, txHash: string): void {
+    const now = this.#now();
+    this.#ledger.update(code, { status: "submitted", tx_hash: txHash, submitted_at: now }, now);
+    this.#track(this.#settle(code, txHash));
+  }
+
+  /** The seller refused or could not settle. Nothing left the wallet. */
+  paymentFailed(code: string, error: string): void {
+    this.#ledger.update(code, { status: "failed", error }, this.#now());
   }
 
   async confirm(req: { conversationId: string; approved: boolean; pin?: string }): Promise<ConfirmResult> {

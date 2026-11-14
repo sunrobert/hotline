@@ -11,6 +11,10 @@ import { CallQueue } from "./calls/queue.ts";
 import { createDialer } from "./calls/elevenlabs.ts";
 import { startDepositPoller } from "./deposits/watcher.ts";
 import { createTokenProvider } from "./dashboard/token.ts";
+import { privateKeyToAccount } from "viem/accounts";
+import { createArcFacilitator } from "./x402/arc-facilitator.ts";
+import { arcUsdcRequirements } from "./x402/protocol.ts";
+import { coinbaseSpot } from "./x402/prices.ts";
 
 const cfg = loadConfig(process.env);
 
@@ -55,7 +59,20 @@ if (cfg.depositPoller) startDepositPoller({
   },
 });
 
+// x402: this server also sells a price feed, and the agent buys from it per lookup.
+// The seller key receives the payments and pays the settlement gas.
+const facilitator = cfg.x402 ? createArcFacilitator({ rpcUrl: cfg.chain.rpcUrl, privateKey: cfg.x402.sellerKey }) : null;
+const x402 = cfg.x402 && facilitator ? {
+  x402Seller: {
+    requirements: arcUsdcRequirements({ amountMicros: cfg.x402.priceMicros, payTo: facilitator.address }),
+    facilitator,
+    quote: (asset: string) => coinbaseSpot(asset),
+  },
+  x402Buyer: { account: privateKeyToAccount(cfg.chain.privateKey), sellerUrl: cfg.x402.sellerUrl },
+} : {};
+
 const app = createApp({
+  ...x402,
   engine, cfg: cfg.server,
   isOutbound: (id) => queue?.isOutbound(id) ?? false,
   streamSecret: cfg.streamSecret ?? undefined,
@@ -67,5 +84,9 @@ serve({ fetch: app.fetch, port: cfg.port }, (info) => {
   console.log(`[hotline] agent wallet ${wallet.address} on Arc testnet`);
   console.log(`[hotline] deposits: ${[cfg.streamSecret ? "QuickNode Stream hook on" : null, cfg.depositPoller ? "RPC poller on" : null].filter(Boolean).join(", ") || "NOTHING is watching for deposits"}`);
   console.log(`[hotline] browser calls ${cfg.agent ? "on" : "off (no ElevenLabs key or agent id)"}`);
+  if (cfg.x402 && facilitator) {
+    const listed = Object.values(cfg.engine.allowlist).some((a) => a.toLowerCase() === facilitator.address.toLowerCase());
+    console.log(`[hotline] x402 price feed on: ${formatUsdc(cfg.x402.priceMicros)} USDC per lookup to ${facilitator.address}${listed ? "" : " (NOT on the allowlist, so the agent will refuse to pay it)"}`);
+  }
   console.log(`[hotline] phone calls ${cfg.voice ? `on, approvals ring ${cfg.ownerNumber.replace(/\d(?=\d{4})/g, "*")}` : "off (no phone number attached)"}`);
 });

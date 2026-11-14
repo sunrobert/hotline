@@ -19,6 +19,13 @@ import { DEFAULT_OPENING_LINE } from "./agent/definition.ts";
 import { DASHBOARD_HTML } from "./dashboard/page.ts";
 import { explorerTx } from "./wallet/arc.ts";
 import { toMicros, fromMicros } from "./money.ts";
+import type { PaymentRequirements } from "./x402/protocol.ts";
+import { paywall } from "./x402/seller.ts";
+import type { Facilitator } from "./x402/seller.ts";
+import { paidFetch } from "./x402/buyer.ts";
+import type { PayerAccount } from "./x402/buyer.ts";
+import { normalizeAsset } from "./x402/prices.ts";
+import type { Quote } from "./x402/prices.ts";
 
 const dashboardFile = (name: string) => readFileSync(new URL(`./dashboard/${name}`, import.meta.url));
 const SOUNDS: Record<string, Buffer> = {
@@ -51,6 +58,10 @@ export interface AppDeps {
   now?: () => number;
   /** Secret QuickNode signs Stream deliveries with. No secret, no hook. */
   streamSecret?: string;
+  /** A paid price feed at GET /x402/price, sold over x402. The seller is its own facilitator. */
+  x402Seller?: { requirements: PaymentRequirements; facilitator: Facilitator; quote: (asset: string) => Promise<Quote | null> };
+  /** The agent's side: get_price buys from this x402 seller with the agent's key, if policy allows. */
+  x402Buyer?: { account: PayerAccount; sellerUrl: string; fetch?: typeof fetch };
 }
 
 type Body = Record<string, unknown>;
@@ -132,7 +143,71 @@ export function createApp(deps: AppDeps): Hono {
       engine.pause();
       return c.json({ paused: true, message: "Paused. Nothing moves until it is unpaused from the dashboard." });
     },
+
+    // Buys one spot price over x402. The engine approves the payment like any other spend.
+    get_price: async (c, body, conversationId) => {
+      const buyer = deps.x402Buyer;
+      if (!buyer) return c.json({ ok: false, error: "not_configured", message: "Paid price lookups are not set up." });
+      const asset = normalizeAsset(body.asset);
+      if (!asset) return c.json({ ok: false, error: "unsupported_asset", message: "The price feed does not carry that asset." });
+
+      let code: string | null = null;
+      let declined: string | null = null;
+      const url = `${buyer.sellerUrl}?asset=${encodeURIComponent(asset)}`;
+      try {
+        const r = await paidFetch(url, {
+          account: buyer.account, fetch: buyer.fetch,
+          approve: async (req) => {
+            const a = await engine.authorizePayment({
+              payTo: req.payTo, amountMicros: Number(req.amount), resource: url,
+              callerId: normalizeE164(body.caller_id) ?? undefined, conversationId,
+            });
+            if (a.ok) { code = a.code; return { ok: true }; }
+            declined = a.message;
+            return { ok: false, message: a.message };
+          },
+        });
+        if (r.status === "paid" && code) {
+          engine.paymentSubmitted(code, r.settlement.transaction);
+          const quote = r.body as Partial<Quote>;
+          return c.json({
+            ok: true, asset, price_usd: quote.price_usd, as_of: quote.as_of,
+            paid_usdc: fromMicros(Number(r.requirements.amount)), action_code: code,
+            tx_hash: r.settlement.transaction, tx_hash_short: r.settlement.transaction.slice(0, 8),
+            message: `Paid ${fromMicros(Number(r.requirements.amount))} USDC for this price over x402, settled on Arc.`,
+          });
+        }
+        if (r.status === "declined") return c.json({ ok: false, error: "declined", message: declined ?? r.message });
+        if (r.status === "free") {
+          return c.json({ ok: false, error: r.response.status === 400 ? "unsupported_asset" : "seller_error", message: "The price feed could not answer that." });
+        }
+        if (code) engine.paymentFailed(code, r.status === "failed" ? r.reason : "no_settlement");
+        return c.json({ ok: false, error: "payment_failed", message: "The price feed did not take the payment, so nothing was charged." });
+      } catch (err) {
+        if (code) engine.paymentFailed(code, err instanceof Error ? err.message : String(err));
+        return c.json({ ok: false, error: "seller_unreachable", message: "The price feed is not answering right now." });
+      }
+    },
   };
+
+  // ---------- x402 seller: a paid price feed ----------
+
+  if (deps.x402Seller) {
+    const seller = deps.x402Seller;
+    app.get(
+      "/x402/price",
+      async (c, next) => {
+        // Refuse unknown assets before asking for money.
+        if (!normalizeAsset(c.req.query("asset"))) return c.json({ error: "unsupported_asset" }, 400);
+        await next();
+      },
+      paywall({ requirements: seller.requirements, facilitator: seller.facilitator, description: "Spot price in USD, one lookup" }),
+      async (c) => {
+        const quote = await seller.quote(normalizeAsset(c.req.query("asset"))!);
+        return quote ? c.json(quote) : c.json({ error: "no_quote" }, 502);
+      },
+    );
+  }
 
   /**
    * ElevenLabs calls this as an inbound call connects. The answer fills the variables in

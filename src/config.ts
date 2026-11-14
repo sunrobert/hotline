@@ -31,6 +31,8 @@ export interface Config {
   streamSecret: string | null;
   /** The free RPC poller that also detects deposits. Off only to prove the Stream works alone. */
   depositPoller: boolean;
+  /** The x402 price feed (seller + its facilitator key) and where the agent buys from. Null: get_price is off. */
+  x402: { sellerKey: `0x${string}`; priceMicros: number; sellerUrl: string } | null;
 }
 
 type Env = Record<string, string | undefined>;
@@ -80,6 +82,15 @@ function streamSecret(env: Env): string | null {
   if (!secret) return null;
   if (secret.length < 32) throw new Error("QUICKNODE_STREAM_SECRET must be at least 32 characters");
   return secret;
+}
+
+function x402(env: Env, port: number): Config["x402"] {
+  const sellerKey = env.PRICES_PRIVATE_KEY?.trim();
+  if (!sellerKey) return null;
+  if (!PRIVATE_KEY.test(sellerKey)) throw new Error("PRICES_PRIVATE_KEY must be 0x followed by 64 hex characters");
+  const priceMicros = env.X402_PRICE_USDC?.trim() ? usdc(env, "X402_PRICE_USDC") : 10_000;
+  const sellerUrl = env.X402_SELLER_URL?.trim() || `http://localhost:${port}/x402/price`;
+  return { sellerKey: sellerKey as `0x${string}`, priceMicros, sellerUrl };
 }
 
 export function loadConfig(env: Env): Config {
@@ -146,5 +157,6 @@ export function loadConfig(env: Env): Config {
     voice: voice(env),
     streamSecret: streamSecret(env),
     depositPoller: env.DEPOSIT_POLLER?.trim().toLowerCase() !== "off",
+    x402: x402(env, integer(env, "PORT", 8787, 1, 65_535)),
   };
 }

@@ -74,6 +74,14 @@ const TOOLS: ToolSpec[] = [
     name: "pause",
     description: "Immediately stop the agent from moving any money. Use when the owner says pause, stop everything, freeze, or lock it. It can only be undone from the dashboard.",
   },
+  {
+    name: "get_price",
+    description: "Buy one live spot price in US dollars from a paid price feed. Each lookup costs a cent of USDC, paid automatically over x402 on Arc within the owner's limits. Use only when the owner asks what something is worth.",
+    params: {
+      asset: { type: "string", description: "The ticker in capitals: BTC, ETH, SOL, USDC, EURC, AVAX, LINK, DOGE, or XRP." },
+    },
+    required: ["asset"],
+  },
 ];
 
 export function buildTools(opts: { baseUrl: string; secretId: string }): WebhookTool[] {
@@ -133,6 +141,7 @@ You act only through tools. Saying something does not make it happen.
 - confirm_action: record the owner's yes or no for the action waiting on this call.
 - get_action_status: check whether the last action went through.
 - pause: stop everything.
+- get_price: buy one live price from a paid feed. Costs a cent, paid over x402.
 
 # Sending money
 1. Work out the recipient and the amount. If either is unclear, ask. Never guess an amount.
@@ -153,6 +162,9 @@ You act only through tools. Saying something does not make it happen.
 - If confirm_action reports a wrong PIN and retry is true, ask for it once more. If retry is false, say the request was cancelled and nothing was sent.
 - If confirm_action reports blocked, expired, no_longer_needed, or nothing_pending, say so plainly.
 - Never say money was sent unless a tool result says submitted or complete.
+
+# Prices
+When the owner asks what an asset is worth, call get_price once with its ticker. The lookup pays a cent of USDC to the price feed by itself, within the owner's limits, so do not ask permission first. Say the price rounded the way a person would say it, then mention in a few words that the lookup cost one cent, paid on Arc. If it returns ok false, say you could not get the price and give the message briefly. Do not call it again for the same asset on the same call unless the owner asks.
 
 # After sending
 If the owner asks whether it went through, call get_action_status. Say it is done only when the status is complete. Transaction hashes are unreadable aloud: read the short hash at most once, and say the full receipt is on the dashboard.

@@ -109,3 +109,17 @@ test("the RPC deposit poller is on unless switched off", () => {
   assert.equal(loadConfig(env()).depositPoller, true);
   assert.equal(loadConfig(env({ DEPOSIT_POLLER: "off" })).depositPoller, false);
 });
+
+test("x402 paid lookups are off until the price feed has a key", () => {
+  assert.equal(loadConfig(env()).x402, null);
+});
+
+test("x402: the feed sells at a cent by default, from this server, and the key must be a key", () => {
+  const cfg = loadConfig(env({ PRICES_PRIVATE_KEY: "0x" + "22".repeat(32), PORT: "9000" }));
+  assert.deepEqual(cfg.x402, { sellerKey: "0x" + "22".repeat(32), priceMicros: 10_000, sellerUrl: "http://localhost:9000/x402/price" });
+  const custom = loadConfig(env({ PRICES_PRIVATE_KEY: "0x" + "22".repeat(32), X402_PRICE_USDC: "0.05", X402_SELLER_URL: "https://feed.example/x402/price" }));
+  assert.equal(custom.x402?.priceMicros, 50_000);
+  assert.equal(custom.x402?.sellerUrl, "https://feed.example/x402/price");
+  assert.throws(() => loadConfig(env({ PRICES_PRIVATE_KEY: "nope" })), /PRICES_PRIVATE_KEY/);
+  assert.throws(() => loadConfig(env({ PRICES_PRIVATE_KEY: "0x" + "22".repeat(32), X402_PRICE_USDC: "-1" })), /X402_PRICE_USDC/);
+});
