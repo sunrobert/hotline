@@ -22,7 +22,8 @@
     "tunnel": "node scripts/tunnel.ts",
     "reset-demo": "node --env-file-if-exists=.env.local scripts/reset-demo.ts",
     "stream": "node --env-file-if-exists=.env.local scripts/stream.ts",
-    "preflight": "node --env-file-if-exists=.env.local scripts/preflight.ts"
+    "preflight": "node --env-file-if-exists=.env.local scripts/preflight.ts",
+    "x402": "node --env-file-if-exists=.env.local scripts/x402.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.8",

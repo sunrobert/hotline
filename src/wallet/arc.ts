@@ -17,12 +17,16 @@ export const USDC_SYSTEM_EMITTER = "0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE" 
 /** The optional ERC-20 view of the same balance (6 decimals). Not used for deposit detection: it would double-count. */
 export const USDC_ERC20 = "0x3600000000000000000000000000000000000000" as const;
 
+/** Receipt polling interval. */
+export const ARC_POLLING_MS = 250;
+
 export const explorerTx = (hash: string): string => `${arcTestnet.blockExplorers.default.url}/tx/${hash}`;
 
 export function createArcWallet(opts: { rpcUrl: string; privateKey: `0x${string}` }): Wallet {
   const account = privateKeyToAccount(opts.privateKey);
   const transport = http(opts.rpcUrl, { retryCount: 3, timeout: 15_000 });
-  const reader = createPublicClient({ chain: arcTestnet, transport });
+  // viem's Arc entry has no blockTime, so it would poll receipts every 4 s. Arc makes ~1.2 blocks/s.
+  const reader = createPublicClient({ chain: arcTestnet, transport, pollingInterval: ARC_POLLING_MS });
   const signer = createWalletClient({ account, chain: arcTestnet, transport });
 
   return {

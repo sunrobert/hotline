@@ -8,7 +8,7 @@
 import { createPublicClient, createWalletClient, getAddress, http, parseSignature } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { arcTestnet } from "viem/chains";
-import { USDC_ERC20 } from "../wallet/arc.ts";
+import { ARC_POLLING_MS, USDC_ERC20 } from "../wallet/arc.ts";
 import { withFeeFloor } from "../wallet/fees.ts";
 import type { Facilitator } from "./seller.ts";
 import type { PaymentPayload, SettlementResponse, VerifyResponse } from "./protocol.ts";
@@ -50,7 +50,8 @@ const shortError = (err: unknown): string => {
 export function createArcFacilitator(opts: { rpcUrl: string; privateKey: `0x${string}` }): Facilitator & { address: string } {
   const account = privateKeyToAccount(opts.privateKey);
   const transport = http(opts.rpcUrl, { retryCount: 3, timeout: 15_000 });
-  const reader = createPublicClient({ chain: arcTestnet, transport });
+  // viem's Arc entry has no blockTime, so it would poll receipts every 4 s. Arc makes ~1.2 blocks/s.
+  const reader = createPublicClient({ chain: arcTestnet, transport, pollingInterval: ARC_POLLING_MS });
   const signer = createWalletClient({ account, chain: arcTestnet, transport });
   const network = `eip155:${arcTestnet.id}`;
 
