@@ -28,6 +28,17 @@ const SOUNDS: Record<string, Buffer> = {
 };
 const SOUNDS_JS = dashboardFile("sounds.js").toString("utf8");
 
+/**
+ * Our Stream filter returns { deposits: [...] }. QuickNode may deliver that bare or wrapped
+ * (its filter-test endpoint wraps it in { result }), so look a few levels down for it.
+ */
+function findDeposits(node: unknown, depth = 0): unknown[] {
+  if (depth > 3 || node === null || typeof node !== "object") return [];
+  if (!Array.isArray(node) && Array.isArray((node as Body).deposits)) return (node as { deposits: unknown[] }).deposits;
+  const children = Array.isArray(node) ? node : Object.values(node);
+  return children.flatMap((child) => findDeposits(child, depth + 1));
+}
+
 export interface AppDeps {
   engine: Engine;
   cfg: ServerConfig;
@@ -162,7 +173,7 @@ export function createApp(deps: AppDeps): Hono {
 
     let parsed: unknown = null;
     try { parsed = JSON.parse(raw); } catch { /* acknowledged below */ }
-    const items = parsed && typeof parsed === "object" && Array.isArray((parsed as Body).deposits) ? (parsed as { deposits: unknown[] }).deposits : [];
+    const items = findDeposits(parsed);
     const agent = engine.walletAddress.toLowerCase();
     let accepted = 0, duplicates = 0, ignored = 0;
     for (const item of items) {

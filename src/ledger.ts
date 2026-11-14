@@ -193,6 +193,12 @@ export class Ledger {
     return result.changes === 1;
   }
 
+  /** Which system first reported this deposit: "stream", "poller", or "simulated". */
+  depositSource(txHash: string, logIndex: number): string | null {
+    const row = this.#db.prepare("SELECT via FROM deposits WHERE tx_hash = ? AND log_index = ?").get(txHash, logIndex) as { via: string } | undefined;
+    return row?.via ?? null;
+  }
+
   boundTo(conversationId: string): ActionRow | undefined {
     return this.#one(`${SELECT} WHERE conversation_id = ? ORDER BY bound_at DESC, seq DESC LIMIT 1`, conversationId);
   }

@@ -303,3 +303,24 @@ test("the sound logic is served to the page as a JavaScript module", async () =>
   assert.match(r.type, /javascript/);
   assert.match(r.text, /export function soundsFor/);
 });
+
+test("each ledger row caused by a deposit says what detected it: the QuickNode Stream or the RPC poller", async () => {
+  const { api, engine, wallet, clock } = harness({}, { balance: 60 * U });
+  wallet.credit(200 * U);
+  await engine.handleDeposit({ tx_hash: "0xstream1", log_index: 4, from_addr: "0xfeed", amount: 200 * U, block_number: 7, via: "stream", now: clock.t });
+  wallet.credit(5 * U);
+  await engine.handleDeposit({ tx_hash: "0xpoll1", log_index: 0, from_addr: "0xfeed", amount: 5 * U, block_number: 8, via: "poller", now: clock.t });
+  const { json } = await api("GET", "/api/state");
+  const bySource = Object.fromEntries(json.ledger.filter((e: any) => e.detected_by).map((e: any) => [e.detected_by, true]));
+  assert.ok(bySource.stream, "a row detected by the Stream");
+  assert.ok(bySource.poller, "a row detected by the poller");
+  const send = json.ledger.find((e: any) => e.kind === "send" && e.to_label === "alice");
+  assert.equal(send, undefined);
+});
+
+test("rows not caused by a deposit carry no detection source", async () => {
+  const { api, engine } = harness();
+  await engine.propose({ kind: "send", toLabel: "alice", amountUsdc: 5, source: "voice", conversationId: "c1" });
+  const { json } = await api("GET", "/api/state");
+  assert.equal(json.ledger[0].detected_by, null);
+});

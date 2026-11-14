@@ -279,7 +279,11 @@ const STATUS_WORDS = {
   pending: "waiting for you", approved: "approved", submitted: "sending", complete: "sent", failed: "failed",
   cancelled: "cancelled", expired: "expired", expired_no_answer: "no answer", blocked: "blocked", observed: "noted",
 };
-const describe = (e) => e.kind === "deposit" ? `Deposit of ${usdc(e.amount_usdc)} USDC` : `Send ${usdc(e.amount_usdc)} USDC to ${e.to_label ?? "?"}`;
+const SOURCE_WORDS = { stream: "via QuickNode Stream", poller: "via RPC poller", simulated: "simulated" };
+const describe = (e) => {
+  const what = e.kind === "deposit" ? `Deposit of ${usdc(e.amount_usdc)} USDC` : `Send ${usdc(e.amount_usdc)} USDC to ${e.to_label ?? "?"}`;
+  return e.detected_by ? `${what} · ${SOURCE_WORDS[e.detected_by] ?? e.detected_by}` : what;
+};
 
 function render(state) {
   for (const name of soundsFor(lastLedger, state.ledger)) play(name);

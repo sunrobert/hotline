@@ -68,6 +68,8 @@ export interface LedgerEntry {
   reason: string | null;
   tx_hash: string | null;
   error: string | null;
+  /** For rows caused by a deposit: what reported it ("stream", "poller", "simulated"). */
+  detected_by: string | null;
 }
 
 export interface ProposeRequest {
@@ -299,6 +301,7 @@ export class Engine {
       code: r.code, time: r.created_at, source: r.source, kind: r.kind, to_label: r.to_label,
       amount_usdc: fromMicros(r.amount), decision: r.decision, rule: r.rule, status: r.status,
       reason: r.reason, tx_hash: r.tx_hash, error: r.error,
+      detected_by: r.deposit_tx !== null && r.deposit_log_index !== null ? this.#ledger.depositSource(r.deposit_tx, r.deposit_log_index) : null,
     }));
   }
 

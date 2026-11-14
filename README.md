@@ -141,6 +141,26 @@ USDC lands in the agent wallet
 
 If nobody answers, the queue tries once more after ninety seconds, then marks the action `expired_no_answer`. Nothing moves without the spoken yes.
 
+## QuickNode Streams: what makes the phone ring
+
+The outbound approval call starts when USDC lands in the agent's wallet. A **QuickNode Stream** is what notices.
+
+| Setting | Value | Why |
+|---|---|---|
+| Network | `arc-testnet` | Where the agent's wallet lives. |
+| Dataset | `logs` | Arc emits a standard `Transfer` log for every USDC movement, native or ERC-20 (EIP-7708). Logs are the cheapest dataset that carries them. |
+| Filter | [`src/deposits/stream-filter.ts`](src/deposits/stream-filter.ts), runs on QuickNode | Keeps only `Transfer` logs from Arc's USDC system emitter `0xffff…FFfE` whose recipient is the agent, and reshapes them into `{ deposits: [{ tx_hash, log_index, from, to, value, block_number }] }`. Returns `null` otherwise, so nearly every batch delivers nothing. |
+| Destination | Webhook to `/hooks/quicknode` on the backend | The backend verifies QuickNode's HMAC-SHA256 signature (`X-QN-Nonce` + `X-QN-Timestamp` + body, keyed with the Stream's security token) and refuses anything unsigned. |
+| Batch | 5 blocks, elastic | QuickNode requires at least 5 for tip Streams on sub-second chains; elastic batching delivers whatever is ready instead of waiting. |
+| Start | Chain tip | Switching the Stream on never pays for a backfill. |
+| Retries | 10, one second apart | A blip is retried. A long outage pauses the Stream rather than billing for blocks nobody receives. |
+
+**Why the filter matches one emitter, not the USDC contract.** On Arc, an ERC-20 `transfer()` logs twice: once from the USDC contract at 6 decimals and once from the system emitter at 18 decimals. A plain native send logs only from the system emitter. Matching the system emitter counts every transfer exactly once.
+
+**Why a Stream rather than polling.** Measured live: a 1 USDC deposit reached the backend **about 0.8 seconds after its block**, with the RPC poller switched off. Delivery is ordered and retried, so a deposit made while the backend is briefly unreachable is still delivered when it comes back. A free RPC poller also runs as a backup; deposits are keyed on transaction hash and log index, so whichever reports second is ignored. The dashboard shows which one detected each deposit.
+
+**Run it.** `npm run stream -- check` runs the filter on QuickNode against a real past deposit. `npm run stream -- on` creates the Stream at the tip, pointed at `PUBLIC_URL`; `off` deletes it. `npm run tunnel` repoints a running Stream automatically when the tunnel address changes.
+
 ## How it uses Arc
 
 - **USDC is the native asset and the gas token.** A transfer is a plain value send, and fees are paid in the same USDC the agent is managing. The gas reserve rule exists because of this.
@@ -169,7 +189,10 @@ Explorer: https://explorer.testnet.arc.io
 | `src/agent/definition.ts` | The voice agent as code: prompt, tools, languages. |
 | `src/calls/queue.ts` | Outbound approval calls: one at a time, two attempts ninety seconds apart, amount recomputed at dial time. |
 | `src/calls/elevenlabs.ts` | Places calls through ElevenLabs' Twilio integration and watches for them to end. |
-| `src/deposits/watcher.ts` | Reads Arc's USDC Transfer logs and turns transfers to the agent into deposits. |
+| `src/deposits/watcher.ts` | Backup deposit detection: polls Arc's USDC Transfer logs over RPC. |
+| `src/deposits/stream-filter.ts` | The filter QuickNode runs for our Stream. |
+| `src/deposits/stream-config.ts` | The Stream's configuration. |
+| `scripts/stream.ts` | `npm run stream -- check/on/off/status/retarget`. |
 | `src/dashboard/page.html` | The dashboard: one static page, no build step, no secrets. |
 | `src/dashboard/token.ts` | Gets the short-lived token for a browser voice session. |
 | `scripts/agent.ts` | Pushes the agent definition to ElevenLabs. Idempotent. |

@@ -92,3 +92,11 @@ test("Arc's 18-decimal value is converted to micro-USDC, flooring any dust", asy
   const row = ledger.recent(5).find((r) => r.kind === "deposit");
   assert.equal(row?.amount, 1_000_001);
 });
+
+test("deposits are found whether QuickNode delivers the filter result bare or wrapped", async () => {
+  for (const wrap of [(x: unknown) => ({ result: x }), (x: unknown) => ({ data: x }), (x: unknown) => ({ data: [x] }), (x: unknown) => [x]]) {
+    const { deliver, deposit } = harness({ balance: 260 * U });
+    const r = await deliver(wrap({ deposits: [deposit()] }));
+    assert.equal(r.json.accepted, 1, JSON.stringify(wrap("…")));
+  }
+});
