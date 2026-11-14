@@ -80,6 +80,24 @@ The agent runs on **ElevenLabs Agents**. Its whole definition is code in [`src/a
 
 The dashboard plays three original sounds made with ElevenLabs sound effects: a short R&B-style sting when money arrives and the agent is about to ring the owner (and when a browser call starts), a two-tone chime when a send completes on chain, and a soft low tone when a limit blocks a send. Which sound plays is decided by comparing two refreshes of the ledger ([`src/dashboard/sounds.js`](src/dashboard/sounds.js), unit-tested), so opening the page never replays history. A header toggle turns sound off. Phone calls themselves can only use ElevenLabs' built-in sounds, so the custom ones play on the dashboard.
 
+### ElevenLabs products used
+
+| Product | How Hotline uses it |
+|---|---|
+| **ElevenLabs Agents** | The voice agent itself: prompt, model (Claude Sonnet 5.5), and tools, defined in code and pushed through the Agents API. |
+| **Webhook (server) tools** | Six tools that call the backend: status, rules, propose, confirm, action status, pause. Caller identity is bound to platform system variables, and the shared secret comes from the workspace secret store. |
+| **Phone numbers: SIP trunk** | A Telnyx number imported as a SIP trunk, for inbound calls and the outbound approval calls (`/v1/convai/sip-trunk/outbound-call`). |
+| **Conversation-initiation webhook** | At the start of an inbound call the backend tells the agent who is calling and binds a waiting approval to the call. |
+| **Language detection** (system tool) | Switches language mid-call; English plus 31 presets. |
+| **Per-language voices** | Katie for English; Amy, a native Mandarin voice on the `eleven_v4_turbo` model, for the Mandarin preset. |
+| **Voicemail detection and end call** (system tools) | An approval is never left on an answering machine; the agent hangs up cleanly. |
+| **Turn handling** | Filler sounds like "um" and 嗯 do not interrupt the agent; no answer word is ignored. |
+| **Agent testing API** | 27 behaviour tests run against the live agent (`npm run agent:test`). |
+| **Conversations API** | The call queue polls a conversation's status to know when an approval call has ended. |
+| **JavaScript SDK (WebRTC)** | Browser calls from the dashboard, using a conversation token minted server-side. |
+| **Sound effects** | The dashboard's intro sting, confirmation chime, and blocked tone are original sounds generated with ElevenLabs. |
+| **Text to speech** | Used to audition voices and models before choosing them. |
+
 ### Agent behaviour tests
 
 `npm run agent:test` runs [`scripts/agent-tests.ts`](scripts/agent-tests.ts) against the live agent on ElevenLabs' testing API. Each test replays a conversation to a decision point and checks the agent's next tool call, or that it makes none. Current result: **27 of 27 passing.**

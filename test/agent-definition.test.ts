@@ -170,3 +170,17 @@ test("the prompt asks for spoken amounts to be rounded and for natural Mandarin 
   assert.match(p, /密码/);
   assert.match(p, /爱丽丝/);
 });
+
+test("filler sounds like um, 嗯 and 呃 do not interrupt the agent mid-sentence", () => {
+  const turn = agent().conversation_config.turn as { interruption_ignore_terms: string[]; merge_with_default_ignore_terms: boolean; interruption_ignore_term_languages: string[] };
+  for (const filler of ["um", "uh", "hmm", "嗯", "呃"]) assert.ok(turn.interruption_ignore_terms.includes(filler), filler);
+  assert.equal(turn.merge_with_default_ignore_terms, true);
+  assert.deepEqual([...turn.interruption_ignore_term_languages].sort(), ["en", "zh"]);
+});
+
+test("no word that can mean yes or no is ignored, so an answer spoken over the agent is never dropped", () => {
+  const terms = (agent().conversation_config.turn as { interruption_ignore_terms: string[] }).interruption_ignore_terms.map((t) => t.toLowerCase());
+  for (const answer of ["yes", "no", "ok", "okay", "yeah", "yep", "sure", "right", "stop", "wait", "好", "好的", "对", "是", "是的", "可以", "确认", "不", "不要", "等一下"]) {
+    assert.ok(!terms.includes(answer), `"${answer}" must still interrupt`);
+  }
+});

@@ -179,6 +179,9 @@ const systemTool = (name: "language_detection" | "end_call" | "voicemail_detecti
   params: { system_tool_type: name },
 });
 
+/** Pure hesitation sounds. Deliberately excludes every word that can answer a question. */
+export const FILLER_SOUNDS = ["um", "uh", "er", "hmm", "mm", "mm-hmm", "uh-huh", "嗯", "嗯嗯", "呃", "呃呃", "啊", "哦"];
+
 export function buildAgent(opts: { toolIds: string[]; llm: string; name?: string; initiationWebhook?: boolean }) {
   return {
     // Ask the backend who is calling as each inbound call connects. Only on once the backend is reachable.
@@ -211,7 +214,15 @@ export function buildAgent(opts: { toolIds: string[]; llm: string; name?: string
       },
       // ElevenLabs requires flash or turbo v2 for an English-default agent.
       tts: { model_id: "eleven_flash_v2", voice_id: VOICES.en },
-      turn: { turn_timeout: 7, silence_end_call_timeout: 30 },
+      turn: {
+        turn_timeout: 7,
+        silence_end_call_timeout: 30,
+        // Fillers said while the agent is talking should not cut it off mid-sentence (seen on a
+        // real Mandarin call). Nothing that can mean yes, no, or stop is on this list.
+        interruption_ignore_terms: FILLER_SOUNDS,
+        interruption_ignore_term_languages: ["en", "zh"],
+        merge_with_default_ignore_terms: true,
+      },
       conversation: { max_duration_seconds: 300 },
       language_presets: Object.fromEntries(
         EXTRA_LANGUAGES.map((code) => [code, {
