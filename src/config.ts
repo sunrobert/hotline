@@ -27,6 +27,10 @@ export interface Config {
   agent: { apiKey: string; agentId: string } | null;
   /** Null until the agent exists and a phone number is attached. Phone calls are skipped without it. */
   voice: { apiKey: string; agentId: string; phoneNumberId: string; provider: "twilio" | "sip_trunk" } | null;
+  /** Secret QuickNode signs Stream deliveries with. Null: the Stream hook is off. */
+  streamSecret: string | null;
+  /** The free RPC poller that also detects deposits. Off only to prove the Stream works alone. */
+  depositPoller: boolean;
 }
 
 type Env = Record<string, string | undefined>;
@@ -69,6 +73,13 @@ function voice(env: Env): Config["voice"] {
   const provider = env.ELEVENLABS_PHONE_PROVIDER?.trim() || "twilio";
   if (provider !== "twilio" && provider !== "sip_trunk") throw new Error(`ELEVENLABS_PHONE_PROVIDER must be twilio or sip_trunk, got "${provider}"`);
   return apiKey && agentId && phoneNumberId ? { apiKey, agentId, phoneNumberId, provider } : null;
+}
+
+function streamSecret(env: Env): string | null {
+  const secret = env.QUICKNODE_STREAM_SECRET?.trim();
+  if (!secret) return null;
+  if (secret.length < 32) throw new Error("QUICKNODE_STREAM_SECRET must be at least 32 characters");
+  return secret;
 }
 
 export function loadConfig(env: Env): Config {
@@ -133,5 +144,7 @@ export function loadConfig(env: Env): Config {
       ? { apiKey: env.ELEVENLABS_API_KEY.trim(), agentId: env.ELEVENLABS_AGENT_ID.trim() }
       : null,
     voice: voice(env),
+    streamSecret: streamSecret(env),
+    depositPoller: env.DEPOSIT_POLLER?.trim().toLowerCase() !== "off",
   };
 }

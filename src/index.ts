@@ -44,8 +44,9 @@ setInterval(() => {
   if (expired > 0) console.log(`[expiry] ${expired} pending action(s) expired`);
 }, 15_000).unref();
 
-// Deposits: poll Arc for USDC arriving at the agent wallet. Each one may trigger the sweep rule.
-startDepositPoller({
+// Deposits arrive two ways: the QuickNode Stream (POST /hooks/quicknode) and this free RPC poller.
+// Both can run; the ledger's (tx hash, log index) key makes whichever arrives second a no-op.
+if (cfg.depositPoller) startDepositPoller({
   rpcUrl: cfg.chain.rpcUrl,
   agent: wallet.address,
   onDeposit: async (deposit) => {
@@ -57,12 +58,14 @@ startDepositPoller({
 const app = createApp({
   engine, cfg: cfg.server,
   isOutbound: (id) => queue?.isOutbound(id) ?? false,
+  streamSecret: cfg.streamSecret ?? undefined,
   getConversationToken: cfg.agent ? createTokenProvider(cfg.agent) : null,
 });
 serve({ fetch: app.fetch, port: cfg.port }, (info) => {
   console.log(`[hotline] listening on :${info.port}`);
   console.log(`[hotline] dashboard http://localhost:${info.port}/dashboard (sign in with DASHBOARD_TOKEN from .env.local)`);
   console.log(`[hotline] agent wallet ${wallet.address} on Arc testnet`);
+  console.log(`[hotline] deposits: ${[cfg.streamSecret ? "QuickNode Stream hook on" : null, cfg.depositPoller ? "RPC poller on" : null].filter(Boolean).join(", ") || "NOTHING is watching for deposits"}`);
   console.log(`[hotline] browser calls ${cfg.agent ? "on" : "off (no ElevenLabs key or agent id)"}`);
   console.log(`[hotline] phone calls ${cfg.voice ? `on, approvals ring ${cfg.ownerNumber.replace(/\d(?=\d{4})/g, "*")}` : "off (no phone number attached)"}`);
 });

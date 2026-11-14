@@ -20,7 +20,8 @@
     "phone": "node --env-file-if-exists=.env.local scripts/phone.ts",
     "demo:deposit": "node --env-file-if-exists=.env.local scripts/deposit.ts",
     "tunnel": "node scripts/tunnel.ts",
-    "reset-demo": "node --env-file-if-exists=.env.local scripts/reset-demo.ts"
+    "reset-demo": "node --env-file-if-exists=.env.local scripts/reset-demo.ts",
+    "stream": "node --env-file-if-exists=.env.local scripts/stream.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.8",

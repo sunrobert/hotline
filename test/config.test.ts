@@ -98,3 +98,14 @@ test("browser calling needs only the ElevenLabs key and agent id, not a phone nu
   assert.deepEqual(cfg.agent, { apiKey: "k", agentId: "agent_1" });
   assert.equal(cfg.voice, null);
 });
+
+test("the QuickNode Stream secret is optional, and when set must be long enough to sign with", () => {
+  assert.equal(loadConfig(env()).streamSecret, null);
+  assert.equal(loadConfig(env({ QUICKNODE_STREAM_SECRET: "q".repeat(40) })).streamSecret, "q".repeat(40));
+  assert.throws(() => loadConfig(env({ QUICKNODE_STREAM_SECRET: "short" })), /QUICKNODE_STREAM_SECRET/);
+});
+
+test("the RPC deposit poller is on unless switched off", () => {
+  assert.equal(loadConfig(env()).depositPoller, true);
+  assert.equal(loadConfig(env({ DEPOSIT_POLLER: "off" })).depositPoller, false);
+});

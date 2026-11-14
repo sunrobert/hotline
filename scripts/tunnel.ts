@@ -54,6 +54,10 @@ async function ready(publicUrl: string) {
 
   const agent = spawnSync(process.execPath, ["--env-file=.env.local", "scripts/agent.ts"], { stdio: "inherit" });
   if (agent.status !== 0) console.log("warning  updating the agent failed; see above");
+  // If a QuickNode Stream is running, point it at the new address too.
+  if (process.env.QUICKNODE_API_KEY || /^QUICKNODE_API_KEY=./m.test(readFileSync(ENV, "utf8"))) {
+    spawnSync(process.execPath, ["--env-file=.env.local", "scripts/stream.ts", "retarget"], { stdio: "inherit" });
+  }
   console.log(`\nReady. Dashboard: ${publicUrl}/dashboard  (also http://localhost:${port}/dashboard)`);
   console.log("Leave this running. Ctrl-C to stop.");
 }

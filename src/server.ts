@@ -10,10 +10,11 @@ import { readFileSync } from "node:fs";
 
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { Engine } from "./engine.ts";
 import type { ServerConfig } from "./config.ts";
 import { normalizeE164 } from "./phone.ts";
+import { nativeToMicros } from "./money.ts";
 import { DEFAULT_OPENING_LINE } from "./agent/definition.ts";
 import { DASHBOARD_HTML } from "./dashboard/page.ts";
 import { explorerTx } from "./wallet/arc.ts";
@@ -37,6 +38,8 @@ export interface AppDeps {
   /** Simulated deposits are a development aid. Off in production unless set. */
   allowSimulate?: boolean;
   now?: () => number;
+  /** Secret QuickNode signs Stream deliveries with. No secret, no hook. */
+  streamSecret?: string;
 }
 
 type Body = Record<string, unknown>;
@@ -141,6 +144,42 @@ export function createApp(deps: AppDeps): Hono {
         : "The owner called you. Nothing is waiting for approval.";
     }
     return c.json({ type: "conversation_initiation_client_data", dynamic_variables: variables });
+  });
+
+  /**
+   * QuickNode Stream deliveries. Each one is signed: HMAC-SHA256 over nonce + timestamp + body,
+   * keyed with the Stream's security token. Anything that fails that check is refused. Anything
+   * signed is acknowledged with 200 even when it carries nothing useful, because a non-2xx makes
+   * QuickNode retry and eventually pause the Stream.
+   */
+  app.post("/hooks/quicknode", async (c) => {
+    if (!deps.streamSecret) return c.json({ error: "not_found" }, 404);
+    const raw = await c.req.text();
+    const nonce = c.req.header("x-qn-nonce"), timestamp = c.req.header("x-qn-timestamp"), given = c.req.header("x-qn-signature");
+    if (!nonce || !timestamp || !given || !/^[0-9a-f]{64}$/i.test(given)) return c.json({ error: "unauthorized" }, 401);
+    const expected = createHmac("sha256", deps.streamSecret).update(nonce + timestamp + raw).digest();
+    if (!timingSafeEqual(expected, Buffer.from(given, "hex"))) return c.json({ error: "unauthorized" }, 401);
+
+    let parsed: unknown = null;
+    try { parsed = JSON.parse(raw); } catch { /* acknowledged below */ }
+    const items = parsed && typeof parsed === "object" && Array.isArray((parsed as Body).deposits) ? (parsed as { deposits: unknown[] }).deposits : [];
+    const agent = engine.walletAddress.toLowerCase();
+    let accepted = 0, duplicates = 0, ignored = 0;
+    for (const item of items) {
+      const d = item as Record<string, unknown>;
+      const ok = typeof d.tx_hash === "string" && Number.isInteger(d.log_index) && typeof d.from === "string"
+        && typeof d.to === "string" && typeof d.value === "string" && /^\d+$/.test(d.value) && Number.isInteger(d.block_number);
+      if (!ok || (d.to as string).toLowerCase() !== agent) { ignored++; continue; }
+      const amount = nativeToMicros(BigInt(d.value as string));
+      if (amount <= 0) { ignored++; continue; }
+      const result = await engine.handleDeposit({
+        tx_hash: d.tx_hash as string, log_index: d.log_index as number, from_addr: d.from as string,
+        amount, block_number: d.block_number as number, via: "stream", now: now(),
+      });
+      if (result.duplicate) duplicates++; else accepted++;
+    }
+    if (accepted) console.log(`[stream] ${accepted} deposit(s) from QuickNode`);
+    return c.json({ accepted, duplicates, ignored });
   });
 
   app.post("/tools/:tool", async (c) => {
