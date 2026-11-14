@@ -21,6 +21,8 @@ const good = (over: Partial<PreflightFacts> = {}): PreflightFacts => ({
   senderBalance: 50 * U,
   elevenLabsCreditsLeft: 100_000,
   quickNodeCreditsLeft: 79_000_000,
+  x402Enabled: true,
+  sellerBalance: 500_000,
   ...over,
 });
 
@@ -82,4 +84,14 @@ test("facts that could not be read are reported as unknown, never as passing", (
 
 test("no phone number attached is a blocker for a phone demo", () => {
   assert.equal(byName(good({ phoneNumberAssigned: false })).phone!.level, "fail");
+});
+
+test("x402: the price feed should be on, and its seller needs gas to settle payments", () => {
+  assert.equal(byName(good()).x402!.level, "ok");
+  const off = byName(good({ x402Enabled: false, sellerBalance: null })).x402!;
+  assert.equal(off.level, "warn");
+  assert.match(off.fix ?? "", /x402 -- setup/);
+  const dry = byName(good({ sellerBalance: 10_000 })).x402!;
+  assert.equal(dry.level, "fail");
+  assert.match(dry.fix ?? "", /x402 -- setup/);
 });

@@ -75,7 +75,9 @@ const ledgerFacts = existsSync(dbPath) ? await attempt(async () => {
 const chain = createPublicClient({ chain: arcTestnet, transport: http(env.ARC_RPC_URL || "https://rpc.testnet.arc.io", { retryCount: 2 }) });
 const balanceOf = (key: string | undefined) => attempt(async () =>
   key ? nativeToMicros(await chain.getBalance({ address: privateKeyToAccount(key as `0x${string}`).address })) : null);
-const [agentBalance, senderBalance] = await Promise.all([balanceOf(env.AGENT_PRIVATE_KEY), balanceOf(env.SENDER_PRIVATE_KEY)]);
+const [agentBalance, senderBalance, sellerBalance] = await Promise.all([
+  balanceOf(env.AGENT_PRIVATE_KEY), balanceOf(env.SENDER_PRIVATE_KEY), balanceOf(env.PRICES_PRIVATE_KEY),
+]);
 
 const facts: PreflightFacts = {
   serverUp, publicUrl, publicUp, agentToolsUrl, callStartHookUrl,
@@ -87,6 +89,8 @@ const facts: PreflightFacts = {
   paused: ledgerFacts?.paused ?? null,
   pendingActions: ledgerFacts?.pending ?? null,
   agentBalance, senderBalance, elevenLabsCreditsLeft, quickNodeCreditsLeft,
+  x402Enabled: Boolean(env.PRICES_PRIVATE_KEY),
+  sellerBalance,
 };
 
 const checks = evaluatePreflight(facts);

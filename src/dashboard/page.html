@@ -281,7 +281,9 @@ const STATUS_WORDS = {
 };
 const SOURCE_WORDS = { stream: "via QuickNode Stream", poller: "via RPC poller", simulated: "simulated" };
 const describe = (e) => {
-  const what = e.kind === "deposit" ? `Deposit of ${usdc(e.amount_usdc)} USDC` : `Send ${usdc(e.amount_usdc)} USDC to ${e.to_label ?? "?"}`;
+  const what = e.kind === "deposit" ? `Deposit of ${usdc(e.amount_usdc)} USDC`
+    : e.kind === "pay_api" ? `x402 payment: ${usdc(e.amount_usdc)} USDC to ${e.to_label ?? "?"} for data`
+    : `Send ${usdc(e.amount_usdc)} USDC to ${e.to_label ?? "?"}`;
   return e.detected_by ? `${what} · ${SOURCE_WORDS[e.detected_by] ?? e.detected_by}` : what;
 };
 

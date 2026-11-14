@@ -8,7 +8,7 @@ Hotline is an onchain agent you reach by phone. It holds USDC on Arc and acts wi
 
 The phone call is the guardrail.
 
-> **Status: in progress.** The decision loop, policy engine, ledger, tool API, Arc wallet, and the voice agent's definition are built and tested. The agent exists on ElevenLabs and passes its behaviour tests in text. The outbound call queue and the onchain deposit watcher are built and unit-tested. The dashboard is built, and you can start a voice session with the agent from it in the browser. It is not on a phone number yet, so no phone call has been placed, and no full voice conversation has been run end to end: the agent's tools need the backend to be reachable from the internet first. Attaching a number, a QuickNode Stream as the primary trigger, and the iMessage channel are next. This README is updated as each piece lands. Planning docs: [UBC-Hackathon-2026](https://github.com/sunrobert/UBC-Hackathon-2026).
+> **Status: working end to end on Arc testnet; polishing for the finals.** Verified live: an inbound phone call where the owner sends money, switches to Mandarin mid-call, and is blocked over a cap; an outbound approval call answered on a real phone with a spoken yes and PIN, then settled on chain; a QuickNode Stream delivering a deposit 0.8 seconds after its block; and x402 pay-per-request price lookups settled on Arc in under two seconds. Next: the iMessage channel. Planning docs: [UBC-Hackathon-2026](https://github.com/sunrobert/UBC-Hackathon-2026).
 
 ## The decision loop
 
@@ -18,7 +18,7 @@ intent ──> normalize ──> policy ──┬─ AUTO  ──> send now ─�
  or a deposit)            ordered)└─ BLOCK ──> do nothing, name the rule ─┘   (always)
 ```
 
-1. **Intent arrives.** A spoken command through a tool call, a text, or an onchain deposit.
+1. **Intent arrives.** A spoken command through a tool call, a text, an onchain deposit, or a seller asking to be paid over x402.
 2. **Normalize** to an action: kind, recipient label, amount in micro-USDC.
 3. **Policy** ([`src/policy.ts`](src/policy.ts)) runs its rules in a fixed order. The first match wins, so every decision names exactly one rule.
 4. **Act.** `AUTO` broadcasts immediately. `CALL` waits as `pending` for the owner's voice. `BLOCK` does nothing.
@@ -53,6 +53,7 @@ Blocks are checked before approvals, so an over-cap amount can never be talked t
 - **Expiry.** A pending action nobody decides within ten minutes expires.
 - **Idempotent confirmation.** A repeated yes returns the original result. It does not send twice.
 - **Fails closed on restart.** An action interrupted before broadcast is marked failed and is never re-sent.
+- **Paid data obeys the same limits.** An x402 payment is approved by the same policy as a spoken send: the seller must be on the allowlist (matched by address), the price must fit every cap, and it counts toward the daily cap. A paid lookup never rings the owner; anything that would need approval is refused.
 - **Pause by voice, unpause only from the dashboard.** There is no tool for changing rules or unpausing.
 - **Deduplicated deposits.** A deposit log is keyed on transaction hash and log index, so at-least-once delivery from two sources produces one action.
 
@@ -65,9 +66,9 @@ Blocks are checked before approvals, so an over-cap amount can never be talked t
 
 ## The voice agent
 
-The agent runs on **ElevenLabs Agents**. Its whole definition is code in [`src/agent/definition.ts`](src/agent/definition.ts): the prompt, six webhook tools, and settings. `npm run agent` creates or updates it through the ElevenLabs API, so the agent in the account always matches the repo.
+The agent runs on **ElevenLabs Agents**. Its whole definition is code in [`src/agent/definition.ts`](src/agent/definition.ts): the prompt, seven webhook tools, and settings. `npm run agent` creates or updates it through the ElevenLabs API, so the agent in the account always matches the repo.
 
-- **Tools are the only way it acts.** Six webhook tools map one-to-one to the endpoints below. A test fails if the agent is ever given a tool the server does not have.
+- **Tools are the only way it acts.** Seven webhook tools map one-to-one to the endpoints below. A test fails if the agent is ever given a tool the server does not have.
 - **The model cannot say who is calling.** `caller_id`, `called_number`, and `conversation_id` are bound to ElevenLabs system variables, filled in by the platform from the live call. They are not parameters the model writes.
 - **The shared secret never enters the prompt.** It is stored in ElevenLabs' secret store and referenced by id from each tool's header.
 - **Languages.** English by default, with ElevenLabs language detection switching mid-call to any of 31 other languages. The backend is language-neutral: tools receive numbers, labels, and digits.
@@ -85,14 +86,14 @@ The dashboard plays three original sounds made with ElevenLabs sound effects: a 
 | Product | How Hotline uses it |
 |---|---|
 | **ElevenLabs Agents** | The voice agent itself: prompt, model (Claude Sonnet 5.5), and tools, defined in code and pushed through the Agents API. |
-| **Webhook (server) tools** | Six tools that call the backend: status, rules, propose, confirm, action status, pause. Caller identity is bound to platform system variables, and the shared secret comes from the workspace secret store. |
+| **Webhook (server) tools** | Seven tools that call the backend: status, rules, propose, confirm, action status, pause, and a paid price lookup. Caller identity is bound to platform system variables, and the shared secret comes from the workspace secret store. |
 | **Phone numbers: SIP trunk** | A Telnyx number imported as a SIP trunk, for inbound calls and the outbound approval calls (`/v1/convai/sip-trunk/outbound-call`). |
 | **Conversation-initiation webhook** | At the start of an inbound call the backend tells the agent who is calling and binds a waiting approval to the call. |
 | **Language detection** (system tool) | Switches language mid-call; English plus 31 presets. |
 | **Per-language voices** | Katie for English; Amy, a native Mandarin voice on the `eleven_v4_turbo` model, for the Mandarin preset. |
 | **Voicemail detection and end call** (system tools) | An approval is never left on an answering machine; the agent hangs up cleanly. |
 | **Turn handling** | Filler sounds like "um" and 嗯 do not interrupt the agent; no answer word is ignored. |
-| **Agent testing API** | 27 behaviour tests run against the live agent (`npm run agent:test`). |
+| **Agent testing API** | 29 behaviour tests run against the live agent (`npm run agent:test`). |
 | **Conversations API** | The call queue polls a conversation's status to know when an approval call has ended. |
 | **JavaScript SDK (WebRTC)** | Browser calls from the dashboard, using a conversation token minted server-side. |
 | **Sound effects** | The dashboard's intro sting, confirmation chime, and blocked tone are original sounds generated with ElevenLabs. |
@@ -100,7 +101,7 @@ The dashboard plays three original sounds made with ElevenLabs sound effects: a 
 
 ### Agent behaviour tests
 
-`npm run agent:test` runs [`scripts/agent-tests.ts`](scripts/agent-tests.ts) against the live agent on ElevenLabs' testing API. Each test replays a conversation to a decision point and checks the agent's next tool call, or that it makes none. Current result: **27 of 27 passing.**
+`npm run agent:test` runs [`scripts/agent-tests.ts`](scripts/agent-tests.ts) against the live agent on ElevenLabs' testing API. Each test replays a conversation to a decision point and checks the agent's next tool call, or that it makes none. Current result: **29 of 29 passing.**
 
 | Checked | Result |
 |---|---|
@@ -111,6 +112,7 @@ The dashboard plays three original sounds made with ElevenLabs sound effects: a 
 | A clear no cancels; a counter-proposal re-proposes | 2 / 2 |
 | A blocked amount is not split to get under the cap | pass |
 | A raw wallet address is never passed; an unknown recipient is not paid | 2 / 2 |
+| A price question buys one price with `get_price` (English, Mandarin) | 2 / 2 |
 | "Stop everything" pauses | pass |
 | A caller who is not the owner gets no tools | pass |
 | Outbound approval call: yes + PIN confirms; a voicemail greeting does not | 2 / 2 |
@@ -118,9 +120,11 @@ The dashboard plays three original sounds made with ElevenLabs sound effects: a 
 
 **What this does and does not show.** These tests are text. They verify the agent's reasoning and tool use in each language. They do not verify speech recognition over a phone line. Language support, stated honestly:
 
-1. *Verified on a live phone call:* none yet.
+1. *Verified on a live phone call:* English and Mandarin, including a switch from one to the other mid-call.
 2. *Verified by text tests:* the ten languages above.
 3. *Supported by the platform, not verified here:* the other 22.
+
+The phone line is a Telnyx number imported into ElevenLabs as a SIP trunk.
 
 ## Dashboard
 
@@ -179,6 +183,31 @@ The outbound approval call starts when USDC lands in the agent's wallet. A **Qui
 
 **Run it.** `npm run stream -- check` runs the filter on QuickNode against a real past deposit. `npm run stream -- on` creates the Stream at the tip, pointed at `PUBLIC_URL`; `off` deletes it. `npm run tunnel` repoints a running Stream automatically when the tunnel address changes.
 
+## x402: the agent pays for data, per request
+
+Ask Hotline "what's Ethereum at?" and it buys the answer. The price feed charges one cent of USDC per lookup over **x402**, and the agent pays it on Arc from its own wallet, within the owner's limits, without a human in the loop.
+
+```
+get_price("ETH")
+  -> GET /x402/price?asset=ETH                    402 + PAYMENT-REQUIRED: exact, 0.01 USDC, eip155:5042002
+  -> policy engine: seller on the allowlist? within caps? not paused?   (else: nothing is signed)
+  -> agent key signs EIP-3009 TransferWithAuthorization: exactly 0.01 USDC, to the seller, valid 60 s
+  -> GET again with PAYMENT-SIGNATURE
+       seller checks signature, amount, recipient, time window      (src/x402/protocol.ts)
+       facilitator checks balance, nonce unused, dry-runs the call  (src/x402/arc-facilitator.ts)
+       seller produces the data, then settles: transferWithAuthorization, seller pays the gas
+  <- 200 + the price + PAYMENT-RESPONSE with the Arc transaction hash
+  -> ledger row: pay_api, complete, tx hash; counts toward today's cap
+```
+
+- **Standard, not a lookalike.** It follows the x402 v2 spec: the `exact` scheme on EVM with the `eip3009` transfer method, and the `PAYMENT-REQUIRED`, `PAYMENT-SIGNATURE`, and `PAYMENT-RESPONSE` headers as base64 JSON. Arc's USDC supports EIP-3009 on its ERC-20 interface (EIP-712 domain `USDC`, version `2`), so the payer never sends a transaction and never pays gas.
+- **The seller is its own facilitator.** No public x402 facilitator serves Arc testnet, so the price feed runs in this backend at `/x402/price` with its own key, and settles payments itself. The buyer reaches it over HTTP like any other x402 seller, and would pay any x402 v2 seller that offers exact USDC on Arc.
+- **Data first, then money.** The seller settles only after the data is ready. If the upstream price source fails, the authorization is never broadcast.
+- **Measured live:** 1.3 to 2.0 seconds from the tool call to a settled payment, short enough to sit inside a spoken reply. First payment: [`0xaf44ac5c…`](https://explorer.testnet.arc.io/tx/0xaf44ac5c39e547db1cbec18908e9ea88ec86c8e9ba25c6a170ba2da284d06c51).
+- **Attacks tried live against the seller, all refused:** replaying a settled signature (`invalid_payload`), changing the amount after signing (`..._value_mismatch`), and an expired authorization (`..._valid_before`). A facilitator with no memory, as after a restart, still refuses a settled authorization, because it reads the nonce's state from the USDC contract.
+
+**Run it.** `npm run x402 -- setup` makes the seller key, puts it on the allowlist as `prices`, and gives it 0.5 test USDC for gas. Restart the server, then `npm run x402 -- buy ETH` makes one paid lookup the way the agent does.
+
 ## How it uses Arc
 
 - **USDC is the native asset and the gas token.** A transfer is a plain value send, and fees are paid in the same USDC the agent is managing. The gas reserve rule exists because of this.
@@ -186,12 +215,15 @@ The outbound approval call starts when USDC lands in the agent's wallet. A **Qui
 - **Two decimal scales.** Native values are 18 decimals; the ERC-20 view is 6. Hotline works in integer micro-USDC and floors on the way in, so it never credits more than arrived.
 - **20 gwei fee floor.** Arc's mempool silently drops transactions priced under it. Every send goes through a floor ([`src/wallet/fees.ts`](src/wallet/fees.ts)).
 - **Deterministic finality.** One confirmation is final, which is what lets the agent say "done" on the call.
+- **EIP-3009 on USDC.** Arc's USDC accepts signed `transferWithAuthorization` calls, which is what makes gasless x402 payments possible for the agent.
+- **Sub-second blocks.** Receipts are polled every 250 ms. viem's default for Arc is 4 seconds, which made a paid lookup take nine.
 
 | What | Address (Arc testnet, chain ID 5042002) |
 |---|---|
 | USDC system event emitter (deposit trigger) | `0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE` |
 | USDC ERC-20 interface (not used for detection) | `0x3600000000000000000000000000000000000000` |
 | Agent wallet | `0x354ea63B9120b9d98fd8FbD18145055561EFBa9D` |
+| x402 price feed (seller and facilitator) | `0xeeF0429CEBBCd8693d142D489A630cFAcB9B40aF` |
 
 Explorer: https://explorer.testnet.arc.io
 
@@ -206,7 +238,7 @@ Explorer: https://explorer.testnet.arc.io
 | `src/server.ts` | HTTP tool endpoints for the voice agent, with the owner gate, and the call-start hook. |
 | `src/agent/definition.ts` | The voice agent as code: prompt, tools, languages. |
 | `src/calls/queue.ts` | Outbound approval calls: one at a time, two attempts ninety seconds apart, amount recomputed at dial time. |
-| `src/calls/elevenlabs.ts` | Places calls through ElevenLabs' Twilio integration and watches for them to end. |
+| `src/calls/elevenlabs.ts` | Places calls through ElevenLabs (SIP trunk or Twilio) and watches for them to end. |
 | `src/deposits/watcher.ts` | Backup deposit detection: polls Arc's USDC Transfer logs over RPC. |
 | `src/deposits/stream-filter.ts` | The filter QuickNode runs for our Stream. |
 | `src/deposits/stream-config.ts` | The Stream's configuration. |
@@ -216,6 +248,13 @@ Explorer: https://explorer.testnet.arc.io
 | `scripts/agent.ts` | Pushes the agent definition to ElevenLabs. Idempotent. |
 | `scripts/agent-tests.ts` | Behaviour tests against the live agent. |
 | `src/wallet/arc.ts` | Arc testnet wallet through viem. |
+| `src/x402/protocol.ts` | x402 v2 types, headers, and offline payment verification. Pure. |
+| `src/x402/buyer.ts` | Pays a 402, after the policy engine approves. |
+| `src/x402/seller.ts` | Hono middleware that puts a price on a route. |
+| `src/x402/arc-facilitator.ts` | Checks a payment against Arc and settles it with `transferWithAuthorization`. |
+| `src/x402/prices.ts` | What the feed sells: spot prices from Coinbase's public API. |
+| `scripts/x402.ts` | `npm run x402 -- setup` and `buy`. |
+| `scripts/preflight.ts` | `npm run preflight`: every check before a demo, with the fix for each. |
 | `src/config.ts` | Environment to typed config. Refuses to boot on a bad limit. |
 | `test/` | Unit tests for all of the above. |
 
@@ -231,10 +270,12 @@ npm run check      # typecheck + tests
 npm start          # after setting OWNER_NUMBERS in .env.local; then open http://localhost:8787/dashboard
 npm run agent      # create or update the voice agent (needs ELEVENLABS_API_KEY, PUBLIC_URL)
 npm run agent:test # behaviour tests against the live agent
-npm run phone      # attach your Twilio number to the agent (needs the three TWILIO_ values)
+npm run phone      # attach your phone number to the agent (Telnyx SIP trunk or Twilio)
 npm run demo:deposit -- 20    # send testnet USDC from the sender wallet to the agent
 npm run tunnel     # in a second terminal: free public HTTPS address for this laptop; repoints the agent
 npm run reset-demo # before each rehearsal: money back from savings and alice, agent topped to 15 (add --dry-run to preview)
+npm run x402 -- setup         # price feed for x402: seller key, allowlist entry, gas (restart the server after)
+npm run x402 -- buy ETH       # one paid lookup, the way the agent makes it
 npm run preflight  # before a rehearsal, recording, or the finals: checks everything and prints the fix for anything not ready
 ```
 
@@ -252,3 +293,8 @@ Fund the `sender` and `agent` addresses with testnet USDC at https://faucet.circ
 | `confirm_action` | `approved`, `pin`. Acts on the action bound to this conversation. |
 | `get_action_status` | Where the latest action on this call stands |
 | `pause` | Stops everything |
+| `get_price` | `asset`. Buys one spot price over x402; returns the price and the Arc transaction. |
+
+| Paid route | Does |
+|---|---|
+| `GET /x402/price?asset=ETH` | 402 with `PAYMENT-REQUIRED` until paid; then the price, with `PAYMENT-RESPONSE` |

@@ -21,6 +21,10 @@ export interface PreflightFacts {
   senderBalance: number | null;
   elevenLabsCreditsLeft: number | null;
   quickNodeCreditsLeft: number | null;
+  /** PRICES_PRIVATE_KEY is set, so get_price buys over x402. */
+  x402Enabled: boolean;
+  /** Micro-USDC the x402 seller holds to pay settlement gas. */
+  sellerBalance: number | null;
 }
 
 export type Level = "ok" | "warn" | "fail";
@@ -82,6 +86,11 @@ export function evaluatePreflight(f: PreflightFacts): Check[] {
 
   if (f.quickNodeCreditsLeft === null) add("quicknode_credits", "warn", "Could not read QuickNode credits.");
   else add("quicknode_credits", f.quickNodeCreditsLeft > 1_000_000 ? "ok" : "warn", `${f.quickNodeCreditsLeft} QuickNode credits left.`);
+
+  if (!f.x402Enabled) add("x402", "warn", "x402 price feed is off, so the agent cannot buy a price.", "Run `npm run x402 -- setup`, then restart `npm start`.");
+  else if (f.sellerBalance === null) add("x402", "warn", "Could not read the x402 seller's balance.");
+  else if (f.sellerBalance < 50_000) add("x402", "fail", `x402 seller holds ${usdc(f.sellerBalance)} USDC, too little gas to settle payments.`, "Run `npm run x402 -- setup` to top it up.");
+  else add("x402", "ok", `x402 price feed is on; its seller holds ${usdc(f.sellerBalance)} USDC for gas.`);
 
   return checks;
 }
