@@ -46,6 +46,9 @@ function findDeposits(node: unknown, depth = 0): unknown[] {
   return children.flatMap((child) => findDeposits(child, depth + 1));
 }
 
+
+/** Most the agent pays for one price lookup over x402, whatever the seller asks. */
+export const MAX_LOOKUP_PRICE_MICROS = 50_000; // 0.05 USDC
 export interface AppDeps {
   engine: Engine;
   cfg: ServerConfig;
@@ -61,7 +64,7 @@ export interface AppDeps {
   /** A paid price feed at GET /x402/price, sold over x402. The seller is its own facilitator. */
   x402Seller?: { requirements: PaymentRequirements; facilitator: Facilitator; quote: (asset: string) => Promise<Quote | null> };
   /** The agent's side: get_price buys from this x402 seller with the agent's key, if policy allows. */
-  x402Buyer?: { account: PayerAccount; sellerUrl: string; fetch?: typeof fetch };
+  x402Buyer?: { account: PayerAccount; sellerUrl: string; fetch?: typeof fetch; maxPriceMicros?: number };
 }
 
 type Body = Record<string, unknown>;
@@ -153,11 +156,20 @@ export function createApp(deps: AppDeps): Hono {
 
       let code: string | null = null;
       let declined: string | null = null;
+      let overBudget = false;
+      const budget = buyer.maxPriceMicros ?? MAX_LOOKUP_PRICE_MICROS;
       const url = `${buyer.sellerUrl}?asset=${encodeURIComponent(asset)}`;
       try {
         const r = await paidFetch(url, {
           account: buyer.account, fetch: buyer.fetch,
           approve: async (req) => {
+            // A per-call budget, checked before the engine or the key see anything: an
+            // allowlisted seller still cannot raise its price to the auto-approve limit.
+            if (Number(req.amount) > budget) {
+              overBudget = true;
+              declined = `The price feed asked ${fromMicros(Number(req.amount))} USDC for one lookup, over the ${fromMicros(budget)} USDC budget, so I did not pay.`;
+              return { ok: false, message: declined };
+            }
             const a = await engine.authorizePayment({
               payTo: req.payTo, amountMicros: Number(req.amount), resource: url,
               callerId: normalizeE164(body.caller_id) ?? undefined, conversationId,
@@ -177,9 +189,19 @@ export function createApp(deps: AppDeps): Hono {
             message: `Paid ${fromMicros(Number(r.requirements.amount))} USDC for this price over x402, settled on Arc.`,
           });
         }
-        if (r.status === "declined") return c.json({ ok: false, error: "declined", message: declined ?? r.message });
+        if (r.status === "declined") return c.json({ ok: false, error: overBudget ? "over_budget" : "declined", message: declined ?? r.message });
         if (r.status === "free") {
           return c.json({ ok: false, error: r.response.status === 400 ? "unsupported_asset" : "seller_error", message: "The price feed could not answer that." });
+        }
+        // Broadcast but not confirmed in time: the money may still move. Track it to its
+        // receipt like any submitted send instead of freeing the commitment.
+        const pending = r.status === "failed" && r.settlement?.errorReason === "settlement_pending" ? r.settlement.transaction : "";
+        if (code && pending) {
+          engine.paymentSubmitted(code, pending);
+          return c.json({
+            ok: false, error: "payment_pending", action_code: code, tx_hash: pending, tx_hash_short: pending.slice(0, 8),
+            message: "I paid for the price, but the payment is still confirming on Arc, so the feed has not sent it yet.",
+          });
         }
         if (code) engine.paymentFailed(code, r.status === "failed" ? r.reason : "no_settlement");
         return c.json({ ok: false, error: "payment_failed", message: "The price feed did not take the payment, so nothing was charged." });

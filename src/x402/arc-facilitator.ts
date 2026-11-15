@@ -5,7 +5,8 @@
 // facilitator can only broadcast what the payer signed: the amount, recipient, and time
 // window are inside the signature, and the USDC contract refuses a reused nonce.
 
-import { createPublicClient, createWalletClient, getAddress, http, parseSignature } from "viem";
+import { createPublicClient, createWalletClient, getAddress, http, nonceManager, parseSignature } from "viem";
+import type { Transport } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { arcTestnet } from "viem/chains";
 import { ARC_POLLING_MS, USDC_ERC20 } from "../wallet/arc.ts";
@@ -47,9 +48,11 @@ const shortError = (err: unknown): string => {
   return (e?.shortMessage ?? e?.message ?? String(err)).split("\n")[0]!.slice(0, 200);
 };
 
-export function createArcFacilitator(opts: { rpcUrl: string; privateKey: `0x${string}` }): Facilitator & { address: string } {
-  const account = privateKeyToAccount(opts.privateKey);
-  const transport = http(opts.rpcUrl, { retryCount: 3, timeout: 15_000 });
+export function createArcFacilitator(opts: { rpcUrl: string; privateKey: `0x${string}`; transport?: Transport }): Facilitator & { address: string } {
+  // Two lookups can settle at once. Without a nonce manager each send asks the node for the
+  // next nonce, both get the same one, and the second is refused. viem resets it on a failed send.
+  const account = privateKeyToAccount(opts.privateKey, { nonceManager });
+  const transport = opts.transport ?? http(opts.rpcUrl, { retryCount: 3, timeout: 15_000 });
   // viem's Arc entry has no blockTime, so it would poll receipts every 4 s. Arc makes ~1.2 blocks/s.
   const reader = createPublicClient({ chain: arcTestnet, transport, pollingInterval: ARC_POLLING_MS });
   const signer = createWalletClient({ account, chain: arcTestnet, transport });

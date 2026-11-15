@@ -17,15 +17,21 @@ const agentAccount = privateKeyToAccount("0xac0974bec39a17e36ba4a6b4d238ff944bac
 class FakeFacilitator implements Facilitator {
   settled: PaymentPayload[] = [];
   failSettle: string | null = null;
+  /** Broadcast, but no receipt in time: the spec's non-terminal settlement_pending. */
+  pendingSettle = false;
   async check(): Promise<VerifyResponse> { return { isValid: true }; }
   async settle(p: PaymentPayload): Promise<SettlementResponse> {
     if (this.failSettle) return { success: false, errorReason: this.failSettle, transaction: "", network: ARC_NETWORK };
+    if (this.pendingSettle) {
+      this.settled.push(p);
+      return { success: false, errorReason: "settlement_pending", errorMessage: "timed out waiting for the receipt", transaction: TX, network: ARC_NETWORK };
+    }
     this.settled.push(p);
     return { success: true, transaction: TX, network: ARC_NETWORK, payer: p.payload.authorization.from };
   }
 }
 
-function harness(opts: { allowlistSeller?: boolean; withX402?: boolean } = {}) {
+function harness(opts: { allowlistSeller?: boolean; withX402?: boolean; priceMicros?: number } = {}) {
   const allowlist: Record<string, string> = { alice: ALICE, savings: SAVINGS };
   if (opts.allowlistSeller !== false) allowlist.prices = SELLER;
   const ctx = setup({ cfg: { allowlist } });
@@ -34,7 +40,7 @@ function harness(opts: { allowlistSeller?: boolean; withX402?: boolean } = {}) {
   let app: ReturnType<typeof createApp>;
   const x402 = opts.withX402 === false ? {} : {
     x402Seller: {
-      requirements: arcUsdcRequirements({ amountMicros: 10_000, payTo: SELLER }),
+      requirements: arcUsdcRequirements({ amountMicros: opts.priceMicros ?? 10_000, payTo: SELLER }),
       facilitator,
       quote: async (asset: string) => { quotes.push(asset); return { asset, price_usd: 3123.45, as_of: "2026-11-14T00:00:00Z", source: "test" }; },
     },
@@ -125,4 +131,41 @@ test("get_price explains itself when paid lookups are not set up", async () => {
   const r = await call("get_price", { asset: "ETH" });
   assert.equal(r.json.ok, false);
   assert.equal(r.json.error, "not_configured");
+});
+
+test("a payment broadcast but not yet confirmed is held as submitted with its transaction, not marked failed", async () => {
+  const { call, ledger, engine, facilitator } = harness();
+  facilitator.pendingSettle = true;
+  const r = await call("get_price", { asset: "ETH" });
+  assert.equal(r.json.ok, false);
+  assert.equal(r.json.error, "payment_pending");
+  assert.equal(r.json.tx_hash, TX);
+  assert.doesNotMatch(r.json.message, /nothing was charged/);
+  const row = ledger.get(r.json.action_code);
+  assert.equal(row?.kind, "pay_api");
+  assert.notEqual(row?.status, "failed");
+  assert.ok(row?.submitted_at, "recorded as submitted");
+  assert.equal(row?.tx_hash, TX);
+  // The engine follows the transaction to its receipt, like any other submitted send.
+  await engine.idle();
+  assert.equal(ledger.get(r.json.action_code)?.status, "complete");
+});
+
+test("get_price refuses a seller asking more than the per-lookup budget, before signing anything", async () => {
+  const { call, ledger, facilitator, quotes } = harness({ priceMicros: 60_000 });
+  const r = await call("get_price", { asset: "ETH" });
+  assert.equal(r.json.ok, false);
+  assert.equal(r.json.error, "over_budget");
+  assert.match(r.json.message, /0\.06/);
+  assert.match(r.json.message, /0\.05/);
+  assert.equal(facilitator.settled.length, 0);
+  assert.equal(quotes.length, 0);
+  assert.equal(ledger.recent(5).length, 0);
+});
+
+test("get_price pays a price exactly at the per-lookup budget", async () => {
+  const { call } = harness({ priceMicros: 50_000 });
+  const r = await call("get_price", { asset: "ETH" });
+  assert.equal(r.json.ok, true);
+  assert.equal(r.json.paid_usdc, 0.05);
 });
