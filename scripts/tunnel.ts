@@ -32,7 +32,7 @@ let watch: WatchState = { failures: 0 };
 function start(): void {
   const myGeneration = ++generation;
   currentUrl = null;
-  const proc = spawn("cloudflared", ["tunnel", "--no-autoupdate", "--url", `http://localhost:${port}`], { stdio: ["ignore", "pipe", "pipe"] });
+  const proc = spawn("cloudflared", ["tunnel", "--no-autoupdate", "--protocol", "http2", "--url", `http://localhost:${port}`], { stdio: ["ignore", "pipe", "pipe"] });
   child = proc;
   proc.on("error", () => {
     console.error("cloudflared is not installed. Run: brew install cloudflared");
